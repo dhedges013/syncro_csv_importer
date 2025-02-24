@@ -4,22 +4,13 @@ import os
 from pprint import pprint
 import time
 
-'''
-This File should contain all the API Get calls to store data like
-get tickets, get customers, get contacts, get techs, get issue types, get ticket statuses
-
-API Endpoints are passed into syncro_api_get function
-
-'''
-
+# Import from syncro_config and utils
+from syncro_configs import get_logger
+from syncro_utils import syncro_api_call
 
 # Add parent directory to sys.path for imports
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_dir)
-
-# Import from syncro_config and utils
-from syncro_configs import SYNCRO_API_BASE_URL, SYNCRO_API_KEY, get_logger
-from syncro_utils import syncro_api_call
 
 # Get a logger for this module
 logger = get_logger(__name__)

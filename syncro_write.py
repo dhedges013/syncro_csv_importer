@@ -1,10 +1,11 @@
 import os
 import logging
 import sys
+import requests
 from syncro_utils import syncro_api_call, check_duplicate_customer, check_duplicate_contact
 from syncro_configs import get_logger
 from syncro_read import syncro_get_all_contacts
-import requests
+
 
 
 # Add parent directory to sys.path for imports

@@ -1,6 +1,16 @@
 
-from syncro_utils import  syncro_get_all_tickets_and_comments_from_combined_csv,order_ticket_rows_by_date,syncro_prepare_ticket_combined_comment_json,syncro_prepare_ticket_combined_json
-from syncro_write import syncro_create_ticket, syncro_create_comment
+from syncro_utils import (
+    syncro_get_all_tickets_and_comments_from_combined_csv,
+    order_ticket_rows_by_date,
+    syncro_prepare_ticket_combined_comment_json,
+    syncro_prepare_ticket_combined_json
+)
+
+from syncro_write import (
+    syncro_create_ticket,
+    syncro_create_comment
+)
+
 from syncro_read import get_syncro_ticket_by_number
 from syncro_configs import get_logger
 

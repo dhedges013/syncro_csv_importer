@@ -7,9 +7,28 @@ import requests
 import logging
 from typing import Any, Dict, List
 import csv
-from syncro_configs import SYNCRO_API_BASE_URL, SYNCRO_API_KEY, get_logger, TEMP_FILE_PATH, SYNCRO_TIMEZONE
-import pytz  # Make sure to install pytz if not already installed
+import pytz
+from collections import defaultdict
 
+from syncro_configs import (
+    SYNCRO_API_BASE_URL,
+    SYNCRO_API_KEY,
+    get_logger,
+    TEMP_FILE_PATH,
+    SYNCRO_TIMEZONE,
+    TICKETS_CSV_PATH,
+    COMMENTS_CSV_PATH,
+    COMBINED_TICKETS_COMMENTS_CSV_PATH
+)
+
+from syncro_read import (
+    syncro_get_all_techs,
+    syncro_get_issue_types,
+    syncro_get_all_customers,
+    syncro_get_all_contacts,
+    syncro_get_ticket_statuses,
+    increment_api_call_count
+)
 
 _temp_data_cache = None  # Global cache for temp data
 
@@ -56,7 +75,7 @@ def load_or_fetch_temp_data(logger: logging.Logger, force_refresh: bool = False)
             logger.error(f"Failed to load temp data from file: {e}")
 
     # Fetch data from Syncro API
-    from syncro_read import syncro_get_all_techs, syncro_get_issue_types, syncro_get_all_customers, syncro_get_all_contacts, syncro_get_ticket_statuses
+    
 
     logger.info("Fetching data from Syncro API...")
     try:
@@ -151,7 +170,7 @@ def syncro_api_call(method: str, endpoint: str, data: dict = None, params: dict 
     Returns:
         dict: JSON response from the API.
     """
-    from syncro_read import increment_api_call_count
+    
     increment_api_call_count()
     url = f"{SYNCRO_API_BASE_URL}{endpoint}"
     headers = {
@@ -746,7 +765,7 @@ def syncro_get_all_tickets_from_csv(logger: logging.Logger = None) -> List[Dict[
     Raises:
         Exception: If loading tickets fails for any reason.
     """
-    from syncro_configs import TICKETS_CSV_PATH
+    
 
     required_fields = [
         "ticket customer",
@@ -794,7 +813,7 @@ def syncro_get_all_comments_from_csv(logger: logging.Logger = None) -> List[Dict
     Raises:
         Exception: If loading comments fails for any reason.
     """
-    from syncro_configs import COMMENTS_CSV_PATH
+    
 
     required_fields = [
         "ticket customer",
@@ -1093,9 +1112,6 @@ def syncro_prepare_comments_json(comment):
 
     return comment_json
 
-
-from collections import defaultdict
-
 def group_comments_by_ticket_number(comments):
     """
     Groups comments by ticket number.
@@ -1135,7 +1151,7 @@ def group_comments_by_ticket_number(comments):
     return dict(grouped_comments)
 
 def syncro_get_all_tickets_and_comments_from_combined_csv():
-    from syncro_configs import COMBINED_TICKETS_COMMENTS_CSV_PATH
+    
     
     logger = get_logger(__name__)
 
@@ -1226,9 +1242,8 @@ def syncro_prepare_row_json(row):
 
 
 if __name__ == "__main__":
-    from pprint import pprint
-    tickets = syncro_get_all_tickets_and_comments_from_combined_csv()
     
+    tickets = syncro_get_all_tickets_and_comments_from_combined_csv()    
     tickets_in_order = order_ticket_rows_by_date(tickets)
     logger.info(f"Tickets in order type: {type(tickets_in_order)}")
     for key, value in tickets_in_order.items():
