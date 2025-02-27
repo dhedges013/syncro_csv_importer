@@ -3,10 +3,16 @@ import sys
 import os
 from pprint import pprint
 import time
+import requests
 
 # Import from syncro_config and utils
-from syncro_configs import get_logger
-from syncro_utils import syncro_api_call
+from syncro_configs import (
+    SYNCRO_API_BASE_URL,
+    SYNCRO_API_KEY,
+    get_logger
+
+)
+
 
 # Add parent directory to sys.path for imports
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -27,6 +33,41 @@ def increment_api_call_count():
 def get_api_call_count() -> int:
     """Retrieve the total API call count."""
     return _api_call_count
+
+
+def syncro_api_call(method: str, endpoint: str, data: dict = None, params: dict = None):
+    """
+    Generic API call to SyncroMSP.
+
+    Args:
+        method (str): HTTP method (e.g., 'POST', 'PUT', 'GET').
+        endpoint (str): API endpoint.
+        data (dict): JSON payload for the request (optional).
+        params (dict): Query parameters for the request (optional).
+
+    Returns:
+        dict: JSON response from the API.
+    """
+    
+    increment_api_call_count()
+    url = f"{SYNCRO_API_BASE_URL}{endpoint}"
+    headers = {
+        "Authorization": f"Bearer {SYNCRO_API_KEY}",
+        "accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        response = requests.request(method, url, headers=headers, json=data, params=params)
+        time.sleep(0.5)
+        response.raise_for_status()  # Raise HTTPError for bad responses
+        return response.json() if response.content else {}
+    except requests.HTTPError as http_err:
+        logger.error(f"HTTP error occurred: {http_err}")
+        raise
+    except requests.RequestException as req_err:
+        logger.error(f"Request error occurred: {req_err}")
+        raise
 
 def syncro_api_get(endpoint: str, params: dict = None):
     """

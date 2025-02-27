@@ -2,6 +2,7 @@ import os
 import sys
 import time
 from datetime import datetime
+from dateutil import parser
 import json
 import requests
 import logging
@@ -107,8 +108,6 @@ def load_or_fetch_temp_data(logger: logging.Logger, force_refresh: bool = False)
 # Add parent directory to sys.path for imports
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_dir)
-
-
 
 def get_customer_id_by_name(customer_name: str):#, logger: logging.Logger) -> int:
     """
@@ -846,10 +845,6 @@ def syncro_get_all_comments_from_csv(logger: logging.Logger = None) -> List[Dict
         logger.error(f"An unexpected error occurred while loading comments: {e}")
         raise
 
-
-
-
-
 def syncro_prepare_ticket_combined_json(ticket):
     """
     required_fields = [
@@ -909,6 +904,57 @@ def syncro_prepare_ticket_combined_json(ticket):
 
 
 
+def parse_comment_created(comment_created):
+    """
+    Parses the comment timestamp to ensure it is correctly formatted.
+
+    - Uses `dateutil.parser.parse` to automatically handle most formats.
+    - If `dateutil.parser` fails, falls back to explicit parsing.
+    - Handles both MM/DD/YYYY and DD/MM/YYYY by attempting logical swaps.
+    """
+
+    if isinstance(comment_created, datetime):
+        logger.info(f"comment_created is already a datetime object: {comment_created}")
+        return comment_created  # Return as is
+
+    try:
+        # Try using dateutil's parser for automatic parsing
+        parsed_date = parser.parse(comment_created, dayfirst=False)
+        logger.info(f"Parsed datetime using dateutil: {parsed_date}")
+        return parsed_date
+
+    except (ValueError, TypeError) as e:
+        logger.warning(f"dateutil parser failed: {e}")
+
+    # Explicit format handling as fallback
+    possible_formats = [
+        "%m/%d/%Y %I:%M %p",  # MM/DD/YYYY 12-hour
+        "%m/%d/%Y %H:%M",     # MM/DD/YYYY 24-hour
+        "%m/%d/%y %H:%M",     # MM/DD/YY 24-hour
+        "%d/%m/%Y %H:%M",     # DD/MM/YYYY 24-hour
+        "%d/%m/%y %H:%M",     # DD/MM/YY 24-hour
+        "%Y-%m-%d %H:%M:%S",  # ISO format
+    ]
+
+    for fmt in possible_formats:
+        try:
+            parsed_date = datetime.strptime(comment_created, fmt)
+            logger.info(f"Parsed datetime using format '{fmt}': {parsed_date}")
+            return parsed_date
+        except ValueError:
+            continue
+
+    # Last attempt: flip month and day if format is ambiguous
+    try:
+        temp_date = datetime.strptime(comment_created, "%m/%d/%y %H:%M")
+        flipped_date = datetime(temp_date.year, temp_date.day, temp_date.month, temp_date.hour, temp_date.minute)
+        logger.info(f"Converted timestamp (flipped month/day): {flipped_date}")
+        return flipped_date
+    except ValueError as e:
+        logger.error(f"Final attempt failed: {e}")
+
+    logger.error(f"Unrecognized date format: {comment_created}")
+    return None
 
 
 def syncro_prepare_ticket_combined_comment_json(comment):
@@ -930,41 +976,6 @@ def syncro_prepare_ticket_combined_comment_json(comment):
     ]
     """    # Extract individual fields
 
-    def parse_comment_created(comment_created):
-        """
-        Parses the comment timestamp to ensure it is correctly formatted.
-
-        - If AM/PM is present, assume MM/DD/YYYY %I:%M %p.
-        - Otherwise, flip month/day and assume DD/MM/YY %H:%M.
-        """
-
-        if isinstance(comment_created, datetime):
-            logger.info(f"comment_created is already a datetime object: {comment_created}")
-            return comment_created  # Return as is
-
-        if "AM" in comment_created or "PM" in comment_created:
-            logger.info(f"Timestamp contains AM or PM: {comment_created}")                
-            try:
-                comment_created = datetime.strptime(comment_created, "%m/%d/%Y %I:%M %p")
-                logger.info(f"Parsed datetime: {comment_created}")
-                return comment_created  # Return the parsed datetime object
-            except ValueError as e:
-                logger.error(f"ValueError: {e}")
-                return None  # Return None if parsing fails
-        else:
-            logger.info(f"Timestamp does not contain AM or PM: {comment_created}")
-            try:
-                # First, attempt to parse assuming MM/DD/YY
-                temp_date = datetime.strptime(comment_created, "%m/%d/%y %H:%M")
-
-                # Swap month and day
-                flipped_date = datetime(temp_date.year, temp_date.day, temp_date.month, temp_date.hour, temp_date.minute)
-
-                logger.info(f"Converted timestamp (flipped month/day): {flipped_date}")
-                return flipped_date
-            except ValueError as e:
-                logger.error(f"Error processing date '{comment_created}': {e}")
-                return None
 
     comment_created =  comment.get("timestamp") 
     comment_created = parse_comment_created(comment_created)
@@ -1232,16 +1243,15 @@ def order_ticket_rows_by_date(ticket_rows_data):
 
     return ordered_ticket_rows_data
 
-
-
-
-
-
 def syncro_prepare_row_json(row):
     pass
 
 
 if __name__ == "__main__":
+    
+    comment_created = "6/12/2024 15:00"
+    date = parse_comment_created(comment_created)
+    print(date)
     
     tickets = syncro_get_all_tickets_and_comments_from_combined_csv()    
     tickets_in_order = order_ticket_rows_by_date(tickets)
