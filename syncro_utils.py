@@ -489,11 +489,8 @@ def build_syncro_initial_issue(initial_issue: str, syncroContact: str) -> list:
             }
         ]
 
-        
-
         # Log the built JSON
         logger.info(f"Successfully built initial issue comments: {initial_issue_comments}")
-
         return initial_issue_comments
 
     except ValueError as ve:
@@ -689,7 +686,6 @@ def get_syncro_priority(priority: str) -> str:
 
         # Normalize the input to lowercase for case-insensitive matching
         normalized_priority = priority.strip().lower()
-
         # Attempt to find the match
         matched_priority = priority_map.get(normalized_priority)
 
@@ -697,8 +693,8 @@ def get_syncro_priority(priority: str) -> str:
             logger.info(f"Priority '{priority}' matched to '{matched_priority}'")
             return matched_priority
         else:
-            logger.warning(f"No match found for priority: {priority}")
-            return None
+            logger.warning(f"NON Standard Priority was passed in: {priority}, defaulting to '2 Normal'.")
+            return "2 Normal"
 
     except Exception as e:
         # Log any unexpected errors
@@ -727,8 +723,9 @@ def get_syncro_issue_type(issue_type: str):
         issue_types = temp_data.get("issue_types", [])
 
         if not issue_types:
-            logger.warning("No issue types found in Syncro settings.")
-            return None
+            logger.warning("No issue types found in Syncro settings. Returning Other")
+            syncro_issue_type = "Other"
+            return syncro_issue_type
 
         # Normalize the input for case-insensitive comparison
         normalized_issue_type = issue_type.strip().lower()
@@ -763,9 +760,7 @@ def syncro_get_all_tickets_from_csv(logger: logging.Logger = None) -> List[Dict[
 
     Raises:
         Exception: If loading tickets fails for any reason.
-    """
-    
-
+    """  
     required_fields = [
         "ticket customer",
         "ticket number",
@@ -777,10 +772,6 @@ def syncro_get_all_tickets_from_csv(logger: logging.Logger = None) -> List[Dict[
         "ticket created"
     ]
 
-    # Ensure logger is initialized
-    if logger is None:
-        logger = logging.getLogger("syncro")
-    
     try:
         logger.info("Attempting to load tickets from CSV...")
         tickets = load_csv(TICKETS_CSV_PATH, required_fields=required_fields, logger=logger)
@@ -811,9 +802,7 @@ def syncro_get_all_comments_from_csv(logger: logging.Logger = None) -> List[Dict
 
     Raises:
         Exception: If loading comments fails for any reason.
-    """
-    
-
+    """  
     required_fields = [
         "ticket customer",
         "ticket number",                
@@ -823,10 +812,6 @@ def syncro_get_all_comments_from_csv(logger: logging.Logger = None) -> List[Dict
         "comment created"
     ]
 
-    # Ensure logger is initialized
-    if logger is None:
-        logger = logging.getLogger("syncro")
-    
     try:
         logger.info("Attempting to load comments from CSV...")
         comments = load_csv(COMMENTS_CSV_PATH, required_fields=required_fields, logger=logger)
@@ -846,7 +831,12 @@ def syncro_get_all_comments_from_csv(logger: logging.Logger = None) -> List[Dict
         raise
 
 def syncro_prepare_ticket_combined_json(ticket):
-    """
+    """ 
+    Used with the tickets_and_comments_combined.csv template
+
+    This is the Initial ticket creation. for the combined template. for the Comment adds
+    look for syncro_prepare_ticket_combined_comment_json function
+
     required_fields = [
         "ticket customer",
         "ticket number",  
@@ -862,12 +852,11 @@ def syncro_prepare_ticket_combined_json(ticket):
         "ticket priority"
     ]
     """
-
-
     # Extract individual fields
     customer = ticket.get("ticket customer")
     ticket_number = ticket.get("ticket number")
     subject = ticket.get("ticket subject")
+    #Missing Tech
     initial_issue = ticket.get("ticket description")
     status = ticket.get("ticket status")
     issue_type = ticket.get("ticket issue type")
@@ -877,7 +866,8 @@ def syncro_prepare_ticket_combined_json(ticket):
 
     # Process fields
     customer_id = get_customer_id_by_name(customer)
-    syncro_ticket_number = get_syncro_ticket_number(ticket_number)    
+    syncro_ticket_number = get_syncro_ticket_number(ticket_number) 
+    #Missing processing Tech data   
     syncro_created_date = get_syncro_created_date(created)
     syncro_contact = get_syncro_customer_contact(customer_id, contact)
     initial_issue_comments = build_syncro_initial_issue(initial_issue, contact)
@@ -888,7 +878,8 @@ def syncro_prepare_ticket_combined_json(ticket):
     ticket_json = {
         "customer_id": customer_id,
         "number": syncro_ticket_number,
-        "subject": subject,        
+        "subject": subject,
+        #"user_id": syncro_tech,        
         "comments_attributes": initial_issue_comments,
         "status": status,
         "problem_type": syncro_issue_type,
@@ -901,9 +892,6 @@ def syncro_prepare_ticket_combined_json(ticket):
     ticket_json = {key: value for key, value in ticket_json.items() if value is not None}
 
     return ticket_json
-
-
-
 def parse_comment_created(comment_created):
     """
     Parses the comment timestamp to ensure it is correctly formatted.
@@ -916,7 +904,6 @@ def parse_comment_created(comment_created):
     if isinstance(comment_created, datetime):
         logger.info(f"comment_created is already a datetime object: {comment_created}")
         return comment_created  # Return as is
-
     try:
         # Try using dateutil's parser for automatic parsing
         parsed_date = parser.parse(comment_created, dayfirst=False)
@@ -956,10 +943,14 @@ def parse_comment_created(comment_created):
     logger.error(f"Unrecognized date format: {comment_created}")
     return None
 
-
 def syncro_prepare_ticket_combined_comment_json(comment):
-
     """
+    Used with the tickets_and_comments_combined.csv template
+
+    This is the comment creation. for the combined template. for the the intial ticket creation
+    look for syncro_prepare_ticket_json function
+
+    
     required_fields = [
         "ticket customer",
         "ticket number",  
@@ -974,24 +965,20 @@ def syncro_prepare_ticket_combined_comment_json(comment):
         "ticket created date",
         "ticket priority"
     ]
-    """    # Extract individual fields
-
-
+    """ 
+    #pull out individual fields and process them for creating a Syncro comment
     comment_created =  comment.get("timestamp") 
     comment_created = parse_comment_created(comment_created)
     comment_created = comment_created.strftime("%m/%d/%y %H:%M")
-
     customer = comment.get("ticket customer") #need for contact lookup
     ticket_number = comment.get("ticket number") 
-    ticket_comment = comment.get("email body") 
-          
+    ticket_comment = comment.get("email body")           
     comment_contact = comment.get("user")  
 
-    # Process fields
-    
+    # Process fields    
     syncro_created_date = get_syncro_created_date(comment_created)
 
-    # Create JSON payload
+    # Create JSON payload for a Syncro comment
     comment_json = {
         "ticket_number": ticket_number,
         "subject": "API Import",
@@ -1002,16 +989,10 @@ def syncro_prepare_ticket_combined_comment_json(comment):
         "do_not_email": True
     }
 
-    # Remove keys with None values
+    # Remove keys with None values, 
     comment_json = {key: value for key, value in comment_json.items() if value is not None}
 
     return comment_json
-
-
-
-
-
-
 def syncro_prepare_ticket_json(ticket):
     """
     Extract ticket data into variables and create a JSON package for Syncro ticket creation.

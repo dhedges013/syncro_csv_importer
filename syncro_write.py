@@ -6,8 +6,6 @@ from syncro_utils import syncro_api_call, check_duplicate_customer, check_duplic
 from syncro_configs import get_logger
 from syncro_read import syncro_get_all_contacts
 
-
-
 # Add parent directory to sys.path for imports
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_dir)
@@ -208,16 +206,4 @@ def syncro_create_comment(comment_data: dict) -> dict:
 
 
 if __name__ == "__main__":
-    '''
-    ticket_data = {'customer_id': 30054463, 'number': '14', 'subject': 'Password Reset Needed', 'user_id': '140791', 'comments_attributes': [{'subject': 'CSV Import', 'body': 'User forgot their password and needs a reset.', 'hidden': True, 'do_not_email': True, 'tech': 'None'}], 'status': 'Resolved', 'created_at': '2021-01-01T12:00:00-0500', 'priority': '2 Medium'}
-    
-    ticket_data = {
-        "ticket customer": "Hedges MSP",
-        "ticket subject": "Example Ticket",
-        "ticket priority": "High",
-        "ticket status": "Open"
-    }
-    
-    created_ticket = syncro_create_ticket(ticket_data)
-    '''
-    
+    print("This module is not intended to be run directly.")

@@ -14,7 +14,6 @@ from syncro_write import (
 from syncro_read import get_syncro_ticket_by_number
 from syncro_configs import get_logger
 
-
 def main():
     logger = get_logger("main")    
     tickets = syncro_get_all_tickets_and_comments_from_combined_csv()

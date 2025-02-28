@@ -1,6 +1,16 @@
 # syncro_csv_import
  unoffical ticket and comment import tool
 
+
+# To-Do List 2.27.25
+-Template CSV Data points are not unified
+
+combined_ticket and comment JSON builders doesnt account for:
+   - the tech assigned for ticket creation 
+   - if the comment should be private communication or not.
+
+
+
 # Syncro Ticket Importer
 
 ## Setup Instructions
