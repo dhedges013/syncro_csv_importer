@@ -152,7 +152,7 @@ def get_customer_id_by_name(customer_name: str, config: Dict[str, Any]):#, logge
         logger.error(f"An unexpected error occurred in get_customer_id_by_name: {e}")
         return None
   
-def syncro_api_call(method: str, endpoint: str, data: dict = None, params: dict = None):
+def old_want_to_delete_syncro_api_call(method: str, endpoint: str, data: dict = None, params: dict = None):
     """
     Generic API call to SyncroMSP.
 
@@ -462,29 +462,27 @@ def build_syncro_initial_issue(initial_issue: str, syncroContact: str) -> list:
         - Info for successfully built JSON object.
         - Error if inputs are invalid or unexpected issues occur.
     """
+    import json
     try:
         # Validate inputs
         if not initial_issue:
-            raise ValueError("Error: 'initial_issue' must be provided.")
-        
-
+            raise ValueError("Error: 'initial_issue' must be provided.")      
         if not syncroContact:
             syncroContact = "None"
-            logger.warning(f"No Contract was provided setting Ticket Contact to None")
-        
-            
+            logger.warning(f"No Contract was provided setting Ticket Contact to None")        
 
         # Build the JSON structure as a list of comments
-        initial_issue_comments = [
-            {
+        initial_issue_comments = []
+        comment = {                
                 "subject": "CSV Import",
                 "body": initial_issue,
                 "hidden": True,
                 "do_not_email": True,
-                "tech": syncroContact                
-            }
-        ]
-
+                "tech": syncroContact  }
+              
+            
+        
+        initial_issue_comments.append(comment)        
         # Log the built JSON
         logger.info(f"Successfully built initial issue comments: {initial_issue_comments}")
         return initial_issue_comments
@@ -1019,6 +1017,7 @@ def syncro_prepare_ticket_json(ticket,config):
     syncro_created_date = get_syncro_created_date(created) #function is in syncro_utils
     syncro_contact = get_syncro_customer_contact(customer_id, contact) #function is in syncro_utils
     initial_issue_comments = build_syncro_initial_issue(initial_issue, contact) #function is in syncro_utils
+
     syncro_issue_type = get_syncro_issue_type(issue_type) #function is in syncro_utils
     syncro_priority = get_syncro_priority(priority) #function is in syncro_utils
 
@@ -1038,9 +1037,7 @@ def syncro_prepare_ticket_json(ticket,config):
 
     # Remove keys with None values
     ticket_json = {key: value for key, value in ticket_json.items() if value is not None}
-
     return ticket_json
-
 
 
 def syncro_prepare_comments_json(comment):
@@ -1053,9 +1050,7 @@ def syncro_prepare_comments_json(comment):
 
     Returns:
         dict: JSON payload for Syncro ticket creation.
-    """
-
-    
+    """    
     required_fields = [
         "ticket customer",
         "ticket number",                

@@ -2,9 +2,9 @@ import os
 import logging
 import sys
 import requests
-from syncro_utils import syncro_api_call, check_duplicate_customer, check_duplicate_contact
+from syncro_utils import check_duplicate_customer, check_duplicate_contact
 from syncro_configs import get_logger
-from syncro_read import syncro_get_all_contacts
+from syncro_read import syncro_get_all_contacts,syncro_api_call, get_syncro_ticket_by_number
 
 # Add parent directory to sys.path for imports
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -12,8 +12,6 @@ sys.path.insert(0, parent_dir)
 
 # Get a logger for this module
 logger = get_logger(__name__)
-print(f"Handlers for {logger.name}: {logger.handlers}")
-print(f"Handlers for root logger: {logging.getLogger().handlers}")
 
 def syncro_create_customer(config,customer_data: dict):
     """
@@ -78,39 +76,50 @@ def syncro_create_ticket(ticket_data: dict,config) -> dict:
 
     Returns:
         dict: Response data from the API, or None if an error occurs.
-    """
-    from syncro_read import get_syncro_ticket_by_number, increment_api_call_count
+    """    
 
     endpoint = "/tickets"
     try:
         # Extract the ticket number from the payload
         ticket_number = ticket_data.get("number")
         if not ticket_number:
-            logger.error("Ticket number is missing from the payload. Next Available Ticket number will be used")
-            
+            logger.error("Ticket number is missing from the payload. Next Available Ticket number will be used")           
 
         # Check if the ticket number already exists
         existing_ticket = get_syncro_ticket_by_number(ticket_number,config)
         if existing_ticket:
             logger.warning(f"Ticket number '{ticket_number}' already taken. ")
-            #return None
-
-        # Prepare the ticket payload using the provided fields
-        payload = ticket_data        
-
-        # Log the prepared payload
-        logger.info(f"Creating a ticket with payload: {payload}")
-
-        # Send the API call
-        increment_api_call_count()        
-        response = syncro_api_call(config,"POST", endpoint,params=payload)
-
-        # Handle the response
-        if response and "error" not in response:
-            logger.info(f"Successfully created ticket: {response.get('ticket', {}).get('number', 'Unknown')}")
-            return response
         else:
-            logger.error(f"Failed to create ticket. Response: {response}")
+            logger.info(f"Ticket number '{ticket_number}' is available.")         
+        
+        # Prepare the ticket payload using the provided fields
+        payload = ticket_data
+        comments_attributes = payload.get("comments_attributes", [])
+        
+        logger.info(f"Creating a ticket with payload: {payload}")  
+        try:
+            response = syncro_api_call(config,"POST", endpoint,params=payload)
+
+            if response:
+                logger.info(f"Successfully created ticket: {response.get('ticket', {}).get('number', 'Unknown')}")
+                logger.info(f"creating intial issue {comments_attributes}")
+                try:
+                    logger.info(f"adding ticket number to intial issue ")
+                    comments_attributes[0]["ticket_number"] = ticket_number
+                    logger.info(f"Updated comments_attributes: {comments_attributes}")
+                    input("Press Enter to continue...")
+                    comment_response = syncro_create_comment(config, comments_attributes)
+                    if comment_response:
+                        logger.info(f"Successfully created comment for ticket: {ticket_number}")
+                    else:
+                        logger.error("Failed to create comment.")
+                except Exception as e:
+                    logger.error(f"Error creating comment for ticket: {ticket_number}: {e}")
+            else:
+                logger.error("Failed to create ticket.")
+            return response
+        except Exception as e:
+            logger.error(f"Error creating ticket: {e}")
             return None
 
     except requests.exceptions.HTTPError as http_err:
@@ -126,7 +135,7 @@ def syncro_create_ticket(ticket_data: dict,config) -> dict:
         return None
 
 
-def syncro_create_comment(comment_data: dict) -> dict:
+def syncro_create_comment(config, comment_data: dict) -> dict:
     """
     Create a new comment in SyncroMSP using the specified fields.
 
@@ -136,20 +145,23 @@ def syncro_create_comment(comment_data: dict) -> dict:
     Returns:
         dict: Response data from the API, or None if an error occurs.
     """
-    from syncro_read import get_syncro_ticket_by_number, increment_api_call_count
-    from pprint import pprint
+    try:       
+        if type(comment_data) == list:
+            logger.info(f"Creating Comment Function: {len(comment_data)} comments.")
+            comment_data = comment_data[0]
+        else:
+            logger.info("Creating Comment Function:Comment data is not a list, Creating a single comment.")
+            comment_data = comment_data
 
-    try:
-        # Extract the ticket number from the payload
         ticket_number = comment_data.get("ticket_number")
         if not ticket_number:
             logger.error("Ticket number is missing from the payload.")
             return None
 
         # Check if the ticket number already exists
-        existing_ticket = get_syncro_ticket_by_number(ticket_number)
+        existing_ticket = get_syncro_ticket_by_number(ticket_number,config)
         if existing_ticket is None:
-            logger.warning(f"Ticket number '{ticket_number}' is not found. Skipping comment creation.")
+            logger.warning(f"Creating Comment Function: Ticket number '{ticket_number}' is not found. Skipping comment creation.")
             return None
 
         # Extract ticket ID
@@ -158,16 +170,17 @@ def syncro_create_comment(comment_data: dict) -> dict:
             logger.error(f"Failed to retrieve ticket ID for ticket number '{ticket_number}'.")
             return None
         
+        #Logic to look for existing comments
         existing_comments = existing_ticket.get("comments", [])
         if existing_comments is not None:
-            logger.info(f"Found Existing {len(existing_comments)} comments for ticket number '{ticket_number}' ")
+            logger.info(f"Creating Comment Function: Found Existing {len(existing_comments)} comments for ticket number '{ticket_number}' ")
             for comment in existing_comments:
-                logger.info(f"Comparing existing comment body: {comment.get('body')} with new comment body: {comment_data.get('body')}")
+                logger.info(f"Creating Comment Function: Comparing existing comment body: {comment.get('body')} with new comment body: {comment_data.get('body')}")
                 if comment.get("body") == comment_data.get("body"):
-                    logger.warning(f"Comment already exists for ticket number '{ticket_number}'. Skipping comment creation.")
+                    logger.warning(f"Creating Comment Function: Comment already exists for ticket number '{ticket_number}'. Skipping comment creation.")
                     return None  # Move to the next comment 
         else:
-            logger.info(f"No existing comments for ticket number '{ticket_number}'.")
+            logger.info(f"Creating Comment Function: No existing comments for ticket number '{ticket_number}'.")
             
 
         endpoint = f"/tickets/{ticket_id}/comment"
@@ -176,12 +189,9 @@ def syncro_create_comment(comment_data: dict) -> dict:
         payload = comment_data
 
         # Log the prepared payload
-        logger.info(f"Creating a ticket with payload: {payload}")
-
-        # Send the API call
-        increment_api_call_count()
-        #pprint(payload)
-        response = syncro_api_call("POST", endpoint, data=payload)
+        logger.info(f"Creating a comment with payload: {payload}")
+        #response = syncro_api_call("POST", endpoint, data=payload)
+        response = syncro_api_call(config,"POST", endpoint,data=payload)
         
         # Handle the response
         if response and "error" not in response:

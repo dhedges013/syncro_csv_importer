@@ -10,8 +10,8 @@ TEMP_FILE_PATH = "syncro_temp_data.json"
 COMBINED_TICKETS_COMMENTS_CSV_PATH = "tickets_and_comments_combined.csv"
 
 # Syncro API Configuration
-SYNCRO_SUBDOMAIN = "subdomain"
-SYNCRO_API_KEY = "your_api_key"
+SYNCRO_SUBDOMAIN = ""
+SYNCRO_API_KEY = ""
 
 SYNCRO_API_BASE_URL = f"https://{SYNCRO_SUBDOMAIN}.syncromsp.com/api/v1"
 

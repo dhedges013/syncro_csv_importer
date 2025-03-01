@@ -9,7 +9,7 @@ def main():
     try:
         comments = syncro_get_all_comments_from_csv(logger)  
         
-        print(f"Loaded comments: {len(comments)}")
+        logger.info(f"Loaded comments: {len(comments)}")
     except Exception as e:
         logger.critical(f"Failed to load tickets: {e}")
 

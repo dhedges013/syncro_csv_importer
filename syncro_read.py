@@ -116,7 +116,7 @@ def syncro_get_all_contacts(config):
     endpoint = '/contacts'
     try:        
         contacts = syncro_api_call_paginated(config, endpoint)
-        logger.info(f"Retrieved {len(contacts)} contacts: {contacts}")
+        logger.info(f"Retrieved {len(contacts)} contacts")
         return contacts
     except Exception as e:
         logger.error(f"Error fetching contacts: {e}")
