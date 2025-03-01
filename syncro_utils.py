@@ -35,10 +35,8 @@ _temp_data_cache = None  # Global cache for temp data
 
 # Get a logger for this module
 logger = get_logger(__name__)
-print(f"Handlers for {logger.name}: {logger.handlers}")
-print(f"Handlers for root logger: {logging.getLogger().handlers}")
 
-def load_or_fetch_temp_data(logger: logging.Logger, force_refresh: bool = False) -> dict:
+def load_or_fetch_temp_data(logger: logging.Logger, force_refresh: bool = False, config=None) -> dict:
     """
     Load temp data from a file or fetch from Syncro API if file doesn't exist, or if force_refresh is True.
 
@@ -75,16 +73,14 @@ def load_or_fetch_temp_data(logger: logging.Logger, force_refresh: bool = False)
         except Exception as e:
             logger.error(f"Failed to load temp data from file: {e}")
 
-    # Fetch data from Syncro API
-    
-
+    # Fetch data from Syncro API 
     logger.info("Fetching data from Syncro API...")
     try:
-        techs = syncro_get_all_techs()
-        issue_types = syncro_get_issue_types()
-        customers = syncro_get_all_customers()
-        contacts = syncro_get_all_contacts()
-        statuses = syncro_get_ticket_statuses()
+        techs = syncro_get_all_techs(config)
+        issue_types = syncro_get_issue_types(config)
+        customers = syncro_get_all_customers(config)
+        contacts = syncro_get_all_contacts(config)
+        statuses = syncro_get_ticket_statuses(config)
 
         _temp_data_cache = {
             "techs": techs,
@@ -109,7 +105,7 @@ def load_or_fetch_temp_data(logger: logging.Logger, force_refresh: bool = False)
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_dir)
 
-def get_customer_id_by_name(customer_name: str):#, logger: logging.Logger) -> int:
+def get_customer_id_by_name(customer_name: str, config: Dict[str, Any]):#, logger: logging.Logger) -> int:
     """
     Retrieve customer ID from temp data based on matching customer name.
 
@@ -127,7 +123,7 @@ def get_customer_id_by_name(customer_name: str):#, logger: logging.Logger) -> in
     """
     try:
         # Load temp data
-        temp_data = load_or_fetch_temp_data(logger, force_refresh=False)
+        temp_data = load_or_fetch_temp_data(logger, force_refresh=False, config=config)
         customers = temp_data.get("customers", [])
 
         if not customers:
@@ -364,7 +360,7 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
         logger.error(f"Error reading CSV file {filepath}: {e}")
         raise
 
-def get_syncro_ticket_number(ticketNumber: str) -> str:
+def clean_syncro_ticket_number(ticketNumber: str) -> str:
     """
     Cleans the ticket number to ensure it contains only numeric characters.
 
@@ -866,7 +862,7 @@ def syncro_prepare_ticket_combined_json(ticket):
 
     # Process fields
     customer_id = get_customer_id_by_name(customer)
-    syncro_ticket_number = get_syncro_ticket_number(ticket_number) 
+    syncro_ticket_number = clean_syncro_ticket_number(ticket_number) 
     #Missing processing Tech data   
     syncro_created_date = get_syncro_created_date(created)
     syncro_contact = get_syncro_customer_contact(customer_id, contact)
@@ -993,7 +989,7 @@ def syncro_prepare_ticket_combined_comment_json(comment):
     comment_json = {key: value for key, value in comment_json.items() if value is not None}
 
     return comment_json
-def syncro_prepare_ticket_json(ticket):
+def syncro_prepare_ticket_json(ticket,config):
     """
     Extract ticket data into variables and create a JSON package for Syncro ticket creation.
     Removes fields with None values.
@@ -1017,14 +1013,14 @@ def syncro_prepare_ticket_json(ticket):
     priority = ticket.get("ticket priority")
 
     # Process fields
-    customer_id = get_customer_id_by_name(customer)
-    syncro_ticket_number = get_syncro_ticket_number(ticket_number)
-    syncro_tech = get_syncro_tech(tech)
-    syncro_created_date = get_syncro_created_date(created)
-    syncro_contact = get_syncro_customer_contact(customer_id, contact)
-    initial_issue_comments = build_syncro_initial_issue(initial_issue, contact)
-    syncro_issue_type = get_syncro_issue_type(issue_type)
-    syncro_priority = get_syncro_priority(priority)
+    customer_id = get_customer_id_by_name(customer,config)  #function is in syncro_reads
+    syncro_ticket_number = clean_syncro_ticket_number(ticket_number) #function is in syncro_utils
+    syncro_tech = get_syncro_tech(tech) #function is in syncro_utils
+    syncro_created_date = get_syncro_created_date(created) #function is in syncro_utils
+    syncro_contact = get_syncro_customer_contact(customer_id, contact) #function is in syncro_utils
+    initial_issue_comments = build_syncro_initial_issue(initial_issue, contact) #function is in syncro_utils
+    syncro_issue_type = get_syncro_issue_type(issue_type) #function is in syncro_utils
+    syncro_priority = get_syncro_priority(priority) #function is in syncro_utils
 
     # Create JSON payload
     ticket_json = {
@@ -1074,7 +1070,7 @@ def syncro_prepare_comments_json(comment):
     customer = comment.get("ticket customer") #need for contact lookup
     ticket_number = comment.get("ticket number") 
     customer_id = get_customer_id_by_name(customer)
-    syncro_ticket_number = get_syncro_ticket_number(ticket_number) 
+    syncro_ticket_number = clean_syncro_ticket_number(ticket_number) 
     subject = comment.get("ticket subject")    
     
 

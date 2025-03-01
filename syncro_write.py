@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 print(f"Handlers for {logger.name}: {logger.handlers}")
 print(f"Handlers for root logger: {logging.getLogger().handlers}")
 
-def syncro_create_customer(customer_data: dict):
+def syncro_create_customer(config,customer_data: dict):
     """
     Create a new customer in SyncroMSP.
 
@@ -39,7 +39,7 @@ def syncro_create_customer(customer_data: dict):
         return None
     
     # Create new customer if no duplicate found
-    response = syncro_api_call("POST", endpoint, data=customer_data)
+    response = syncro_api_call(config,"POST", endpoint, data=customer_data)    
     if response:
         logger.info(f"Successfully created customer: {response.get('customer', {}).get('name', 'Unknown')}")
     else:
@@ -69,7 +69,7 @@ def syncro_create_contact(contact_data: dict):
         logger.error("Failed to create contact.")
     return response
 
-def syncro_create_ticket(ticket_data: dict) -> dict:
+def syncro_create_ticket(ticket_data: dict,config) -> dict:
     """
     Create a new ticket in SyncroMSP using the specified fields.
 
@@ -90,7 +90,7 @@ def syncro_create_ticket(ticket_data: dict) -> dict:
             
 
         # Check if the ticket number already exists
-        existing_ticket = get_syncro_ticket_by_number(ticket_number)
+        existing_ticket = get_syncro_ticket_by_number(ticket_number,config)
         if existing_ticket:
             logger.warning(f"Ticket number '{ticket_number}' already taken. ")
             #return None
@@ -102,8 +102,8 @@ def syncro_create_ticket(ticket_data: dict) -> dict:
         logger.info(f"Creating a ticket with payload: {payload}")
 
         # Send the API call
-        increment_api_call_count()
-        response = syncro_api_call("POST", endpoint, data=payload)
+        increment_api_call_count()        
+        response = syncro_api_call(config,"POST", endpoint,params=payload)
 
         # Handle the response
         if response and "error" not in response:
