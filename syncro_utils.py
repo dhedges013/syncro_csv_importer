@@ -797,10 +797,8 @@ def syncro_get_all_comments_from_csv(logger: logging.Logger = None) -> List[Dict
     Raises:
         Exception: If loading comments fails for any reason.
     """  
-    required_fields = [
-        "ticket customer",
-        "ticket number",                
-        "ticket subject",
+    required_fields = [        
+        "ticket number",                         
         "ticket comment",
         "comment contact", 
         "comment created"
@@ -862,7 +860,7 @@ def syncro_prepare_ticket_combined_json(ticket):
     customer_id = get_customer_id_by_name(customer)
     syncro_ticket_number = clean_syncro_ticket_number(ticket_number) 
     #Missing processing Tech data   
-    syncro_created_date = get_syncro_created_date(created)
+    syncro_created_date = parse_comment_created(created)
     syncro_contact = get_syncro_customer_contact(customer_id, contact)
     initial_issue_comments = build_syncro_initial_issue(initial_issue, contact)
     syncro_issue_type = get_syncro_issue_type(issue_type)
@@ -1051,10 +1049,8 @@ def syncro_prepare_comments_json(comment):
     Returns:
         dict: JSON payload for Syncro ticket creation.
     """    
-    required_fields = [
-        "ticket customer",
-        "ticket number",                
-        "ticket subject",
+    required_fields = [        
+        "ticket number",                        
         "ticket comment",
         "comment contact",
         "comment created"
@@ -1062,22 +1058,22 @@ def syncro_prepare_comments_json(comment):
 
     # Extract individual fields
 
-    customer = comment.get("ticket customer") #need for contact lookup
-    ticket_number = comment.get("ticket number") 
-    customer_id = get_customer_id_by_name(customer)
+    
+   
+    """
+    #customer = comment.get("ticket customer") #need for contact lookup
+    #customer_id = get_customer_id_by_name(customer)
     syncro_ticket_number = clean_syncro_ticket_number(ticket_number) 
-    subject = comment.get("ticket subject")    
-    
-
-    
-
+    #subject = comment.get("ticket subject")
+    """  
+    ticket_number = comment.get("ticket number") 
     ticket_comment = comment.get("ticket comment") # I tried but it didnt work
     comment_created =  comment.get("comment created")       
     comment_contact = comment.get("comment contact") # System, Daniel Hedges, Sally Joe
 
     # Process fields
     #ticket_comment = build_syncro_initial_issue(ticket_comment, comment_contact)
-    syncro_created_date = get_syncro_created_date(comment_created)
+    syncro_created_date = parse_comment_created(comment_created)
 
     # Create JSON payload
     comment_json = {

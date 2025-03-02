@@ -1,5 +1,5 @@
 import os
-import logging
+from datetime import datetime
 import sys
 import requests
 from syncro_utils import check_duplicate_customer, check_duplicate_contact
@@ -83,15 +83,16 @@ def syncro_create_ticket(ticket_data: dict,config) -> dict:
         # Extract the ticket number from the payload
         ticket_number = ticket_data.get("number")
         if not ticket_number:
-            logger.error("Ticket number is missing from the payload. Next Available Ticket number will be used")           
-
-        # Check if the ticket number already exists
-        existing_ticket = get_syncro_ticket_by_number(ticket_number,config)
-        if existing_ticket:
-            logger.warning(f"Ticket number '{ticket_number}' already taken. ")
+            logger.error("Ticket number is missing from the payload. Next Available Ticket number will be used") 
+            ticket_number = None          
         else:
-            logger.info(f"Ticket number '{ticket_number}' is available.")         
-        
+            # Check if the ticket number already exists
+            existing_ticket = get_syncro_ticket_by_number(ticket_number,config)
+            if existing_ticket:
+                logger.warning(f"Ticket number '{ticket_number}' already taken. ")
+            else:
+                logger.info(f"Ticket number '{ticket_number}' is available.")         
+            
         # Prepare the ticket payload using the provided fields
         payload = ticket_data
         comments_attributes = payload.get("comments_attributes", [])
@@ -101,13 +102,14 @@ def syncro_create_ticket(ticket_data: dict,config) -> dict:
             response = syncro_api_call(config,"POST", endpoint,params=payload)
 
             if response:
-                logger.info(f"Successfully created ticket: {response.get('ticket', {}).get('number', 'Unknown')}")
+                ticket_number =response.get('ticket', {}).get('number', 'Unknown')
+
+                logger.info(f"Successfully created ticket: {ticket_number}")
                 logger.info(f"creating intial issue {comments_attributes}")
                 try:
+
                     logger.info(f"adding ticket number to intial issue ")
                     comments_attributes[0]["ticket_number"] = ticket_number
-                    logger.info(f"Updated comments_attributes: {comments_attributes}")
-                    input("Press Enter to continue...")
                     comment_response = syncro_create_comment(config, comments_attributes)
                     if comment_response:
                         logger.info(f"Successfully created comment for ticket: {ticket_number}")
@@ -135,7 +137,7 @@ def syncro_create_ticket(ticket_data: dict,config) -> dict:
         return None
 
 
-def syncro_create_comment(config, comment_data: dict) -> dict:
+def syncro_create_comment(comment_data: dict,config) -> dict:
     """
     Create a new comment in SyncroMSP using the specified fields.
 
@@ -154,6 +156,7 @@ def syncro_create_comment(config, comment_data: dict) -> dict:
             comment_data = comment_data
 
         ticket_number = comment_data.get("ticket_number")
+
         if not ticket_number:
             logger.error("Ticket number is missing from the payload.")
             return None
@@ -185,8 +188,12 @@ def syncro_create_comment(config, comment_data: dict) -> dict:
 
         endpoint = f"/tickets/{ticket_id}/comment"
         
+        
         # Prepare the ticket payload using the provided fields
-        payload = comment_data
+        #payload = comment_data
+        # Convert datetime objects to strings in ISO format
+        payload = {key: (value.isoformat() if isinstance(value, datetime) else value) for key, value in comment_data.items()}
+
 
         # Log the prepared payload
         logger.info(f"Creating a comment with payload: {payload}")

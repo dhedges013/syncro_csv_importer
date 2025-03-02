@@ -5,7 +5,7 @@ from syncro_configs import get_logger
 from pprint import pprint
 
 logger = get_logger(__name__)
-def run(config):
+def run_tickets(config):
     try:
         tickets = syncro_get_all_tickets_from_csv(logger)        
         logger.info(f"Loaded tickets: {len(tickets)}")
@@ -22,4 +22,4 @@ def run(config):
         
 
 if __name__ == "__main__":
-    run(api_key="", subdomain="")
+    print("This is main_tickets.py")

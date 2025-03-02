@@ -3,7 +3,10 @@ from syncro_write import syncro_create_comment
 from syncro_read import get_api_call_count
 from syncro_configs import get_logger
 
-def main():
+
+
+
+def run_comments(config):
     logger = get_logger("main")
 
     try:
@@ -16,7 +19,7 @@ def main():
     for comment in comments:
         comment_json = syncro_prepare_comments_json(comment)        
         logger.info(f"Attempting to create Comment: {comment_json}")
-        syncro_create_comment(comment_json)
+        syncro_create_comment(comment_json,config)
     
     
     api_call_count = get_api_call_count()
@@ -24,4 +27,5 @@ def main():
         
 
 if __name__ == "__main__":
-    main()
+    print("This is main_comments.py")
+ 

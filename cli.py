@@ -2,7 +2,8 @@
 import os
 from syncro_config_object import SyncroConfig
 from syncro_configs import get_logger, TEMP_FILE_PATH, SYNCRO_API_KEY, SYNCRO_SUBDOMAIN
-from main_tickets import run
+from main_tickets import run_tickets
+from main_comments import run_comments
 
 logger = get_logger(__name__)
 
@@ -35,7 +36,14 @@ def prompt_for_missing_credentials():
 def main_menu():
     check_and_clear_temp_data()
     config = prompt_for_missing_credentials()
-    run(config)
+    which_app = input("Type tickets or comments to run an import").strip().lower()
+    if which_app == "tickets":
+        run_tickets(config)
+    elif which_app == "comments":
+        run_comments(config)
+    else:
+        print("Invalid selection. Please enter 'tickets' or 'comments'.")
+    
 
 if __name__ == "__main__":
     main_menu()

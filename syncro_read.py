@@ -65,7 +65,7 @@ def syncro_api_call(config, method: str, endpoint: str, data=None, params=None) 
 def syncro_api_call_paginated(config, endpoint: str, params=None) -> list:
     """
     Fetch paginated data from Syncro MSP API using the above `syncro_api_call`.
-    Automatically loops through all pages until `meta["next_page"]` is not found.
+    Automatically loops through all pages until `meta["page"]` reaches `meta["total_pages"]`.
     """
     if params is None:
         params = {}
@@ -91,8 +91,8 @@ def syncro_api_call_paginated(config, endpoint: str, params=None) -> list:
         logger.info(f"Fetched {len(page_data)} records from page {current_page}.")
 
         meta = response.get("meta", {})
-        if not meta.get("next_page"):
-            break  # No more pages
+        if meta.get("page", 1) >= meta.get("total_pages", 1):
+            break  # Stop if we have reached the last page
 
         current_page += 1
 
