@@ -44,6 +44,7 @@ def load_or_fetch_temp_data(logger: logging.Logger, config=None) -> dict:
     global _temp_data_cache  # Use a global variable to cache temp data
 
     # Handle force refresh or load from cache
+    '''
     if os.path.exists(TEMP_FILE_PATH):
         try:
             logger.info(f"Temp data file {TEMP_FILE_PATH} exists. Deleting it to create a new one.")
@@ -51,6 +52,7 @@ def load_or_fetch_temp_data(logger: logging.Logger, config=None) -> dict:
         except Exception as e:
             logger.error(f"Failed to delete temp data file: {e}")
             raise
+    '''
 
     # Check if data is already cached in memory
     if _temp_data_cache:
@@ -322,7 +324,7 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
         logger.error(f"Error reading CSV file {filepath}: {e}")
         raise
 def validate_ticket_data(tickets: List[Dict[str, Any]], temp_data: Dict[str, Any], logger: logging.Logger) -> None:
-    logger.info("Validating ticket data...")
+    logger.debug("Validating ticket data...")
 
     # Extract needed lists from temp_data
     techs = temp_data.get("techs", [])
@@ -330,8 +332,8 @@ def validate_ticket_data(tickets: List[Dict[str, Any]], temp_data: Dict[str, Any
     issue_types = temp_data.get("issue_types", [])
     statuses = temp_data.get("statuses", [])
     contacts = temp_data.get("contacts", [])
-    logger.info(f"Retrieved techs: {techs}, customers: {customers}, issue_types: {issue_types}, "
-                f"statuses: {statuses}, contacts: {contacts}")
+    logger.debug(f"Retrieved techs: {techs}, issue_types: {issue_types}, "
+                f"statuses: {statuses}, Ignoring Customers and contacts due to long load")
     
     # Build sets of names/values to compare against
     try:
@@ -363,7 +365,7 @@ def validate_ticket_data(tickets: List[Dict[str, Any]], temp_data: Dict[str, Any
 
 
     for row_num, ticket in enumerate(tickets, start=1):
-        logger.info(f"Row {row_num} - Raw ticket data: {ticket}")
+        logger.debug(f"Validation for Row {row_num} - Raw ticket data: {ticket}")
 
         # Retrieve each field from the ticket
         tech_val = ticket["tech"]
@@ -372,11 +374,11 @@ def validate_ticket_data(tickets: List[Dict[str, Any]], temp_data: Dict[str, Any
         status_val = ticket["ticket status"]
         contact_val = ticket.get("ticket contact")  # or "contact", if that's the CSV header
 
-        logger.info(f"Row {row_num} - Checking tech='{tech_val}', customer='{customer_val}', "
+        logger.debug(f"Validation Row {row_num} - Checking tech='{tech_val}', customer='{customer_val}', "
                      f"issue_type='{issue_type_val}', status='{status_val}', contact='{contact_val}'")
 
         # Check Tech
-        logger.info(f"Row {row_num}: Checking tech '{tech_val}' against {tech_names}")
+        logger.debug(f"Validation Row {row_num}: Checking tech '{tech_val}' against {tech_names}")
 
         if tech_val not in tech_names:
             logger.error(f"Row {row_num}: Tech '{tech_val}' not found in API cache.")
@@ -401,12 +403,9 @@ def validate_ticket_data(tickets: List[Dict[str, Any]], temp_data: Dict[str, Any
         if contact_val not in contact_names:
             logger.warning(f"Row {row_num}: Contact '{contact_val}' not found in API cache.")
 
-        logger.info(f"Row {row_num} - Validation passed for this ticket.")
+        logger.debug(f"Validation Row {row_num} - Validation passed for this ticket.")
 
     logger.info("All tickets validated successfully.")
-
-
-
 
 def syncro_get_all_tickets_from_csv(logger: logging.Logger = None, config: Dict[str, Any] = None) -> List[Dict[str, Any]]:
     """
@@ -445,10 +444,6 @@ def syncro_get_all_tickets_from_csv(logger: logging.Logger = None, config: Dict[
     except Exception as e:
         logger.error(f"An unexpected error occurred while loading tickets: {e}")
         raise
-
-
-
-
 
 
 def clean_syncro_ticket_number(ticketNumber: str) -> str:
@@ -666,8 +661,6 @@ def get_syncro_customer_contact(customerid: str, contact: str):
         - Info on the closest match and its similarity score.
         - Error if any issue occurs during execution.
     """
-    from difflib import get_close_matches, SequenceMatcher
-
     try:
         # Validate inputs
         if not contact:
@@ -682,7 +675,7 @@ def get_syncro_customer_contact(customerid: str, contact: str):
         logger.info(f"Looking up customer ID for customer: {customerid}")
 
         if not customerid:
-            logger.warning(f"Customer '{customerid}' not found.")
+            logger.error(f"For Contact Lookup you need the Customer ID. Customer '{customerid}' not found.")
             return None
 
         # Filter contacts for the given customer ID
@@ -695,53 +688,34 @@ def get_syncro_customer_contact(customerid: str, contact: str):
             return None
 
         # Normalize the input contact name and contact keys
-        normalized_contact = contact.strip().lower()
-        normalized_contact_dict = {
-            c.get("name", "").strip().lower(): c.get("id")
+        normalized_input_contact = contact.strip().lower()
+        normalized_filtered_contacts = {
+            c["name"].strip().lower(): c
             for c in customer_contacts
             if c.get("name") and c.get("id")
         }
 
-        # Find closest match using difflib
-        closest_matches = get_close_matches(normalized_contact, normalized_contact_dict.keys(), n=1, cutoff=0.4)
+        logger.info(f"Contact Lookup: Normalized input contact: {normalized_input_contact}")
+        logger.info(f"Contact Lookup: Normalized filtered contacts: {normalized_filtered_contacts}")
 
-        if closest_matches:
-            closest_match = closest_matches[0]
-            contact_id = normalized_contact_dict[closest_match]
-            logger.info(f"Closest match found: '{closest_match}' for contact '{contact}' with ID {contact_id}")
-            return contact_id
+        # Check for an exact match
+        if normalized_input_contact in normalized_filtered_contacts:
+            logger.info(f"Match found for contact '{contact}' in customer ID: {customerid}")           
+            found_contact_id = normalized_filtered_contacts[normalized_input_contact].get("id")
 
-        # Compute similarity scores for all contacts
-        logger.info(f"No exact match found. Computing similarity scores for '{contact}'.")
-        scores = [
-            (name, SequenceMatcher(None, normalized_contact, name).ratio())
-            for name in normalized_contact_dict.keys()
-        ]
-
-        # Check if scores is empty
-        if not scores:
-            logger.warning(f"No valid scores available for contact '{contact}' in customer '{customerid}'")
-            return None
-
-        # Find the best score
-        best_match, best_score = max(scores, key=lambda item: item[1])
-        logger.info(f"Closest match (by score): '{best_match}' with similarity score {best_score:.2f}")
-
-        # Fallback to substring search
-        logger.info(f"Trying substring matching for '{contact}'")
-        for name, contact_id in normalized_contact_dict.items():
-            if normalized_contact in name:
-                logger.info(f"Substring match found: '{name}' for contact '{contact}' with ID {contact_id}")
-                return contact_id
-
-        # Log a warning if no close or substring match is found
-        logger.warning(f"No close or substring match found for contact '{contact}' in customer '{customerid}'")
+            return found_contact_id
+        
+        # Log no match found
+        logger.warning(f"No exact found for contact '{contact}' in customer ID: {customerid}")
         return None
 
     except Exception as e:
-        # Log any unexpected errors
-        logger.error(f"Error occurred while finding contact '{contact}' for customer '{customerid}': {e}")
+        logger.error(f"Error occurred while finding contact '{contact}' for customer ID: {customerid}: {e}")
         raise
+
+
+
+
 
 def get_syncro_priority(priority: str) -> str:
     """
@@ -1064,7 +1038,6 @@ def syncro_prepare_ticket_json(ticket,config):
     syncro_created_date = get_syncro_created_date(created) #function is in syncro_utils
     syncro_contact = get_syncro_customer_contact(customer_id, contact) #function is in syncro_utils
     initial_issue_comments = build_syncro_initial_issue(initial_issue, contact) #function is in syncro_utils
-
     syncro_issue_type = get_syncro_issue_type(issue_type) #function is in syncro_utils
     syncro_priority = get_syncro_priority(priority) #function is in syncro_utils
 

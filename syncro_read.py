@@ -169,7 +169,7 @@ def get_syncro_ticket_by_number(ticket_number: str,config) -> dict:
         # Handle the response
         if response and "tickets" in response and len(response["tickets"]) > 0:
             ticket = response["tickets"][0]
-            logger.info(f"Successfully retrieved ticket: {ticket}")
+            logger.info(f"Successfully retrieved ticket: {ticket.get('number')}")
             return ticket
         logger.warning(f"No ticket found with number: {ticket_number}")
         return None

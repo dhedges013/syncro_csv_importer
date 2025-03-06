@@ -37,11 +37,6 @@ def prompt_for_missing_credentials():
 def main_menu():
     check_and_clear_temp_data()
     config = prompt_for_missing_credentials()
-    
-    #print(config.api_key)
-    #print(config.subdomain)
-    #print(config.base_url)
-    #pprint(config.__dict__)
     print("Choose your importer:")
     print("1. Tickets")
     print("2. Comments")
