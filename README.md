@@ -10,7 +10,6 @@ combined_ticket and comment JSON builders doesnt account for:
    - if the comment should be private communication or not.
 
 
-
 # Syncro Ticket Importer
 
 ## Setup Instructions
@@ -50,3 +49,11 @@ combined_ticket and comment JSON builders doesnt account for:
 - When creating a new ticket, the **initial issue timestamp** will be set at the time of import.  
 - The **ticket itself** will have the correct created date.
 
+
+
+## Done List
+
+3.5.25
+Added CLI options to run the tool. Will prompt for subdomain and API Key
+Added option for doing Intial Ticket Import or Comment Import but typing a 1 or a 2 from a menu select
+Added Data Validation when loading in CSV Data so it cannot be blank

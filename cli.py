@@ -24,6 +24,7 @@ def check_and_clear_temp_data():
             else:
                 print("Invalid selection. Please enter 'y' for Yes or 'n' for No.")
 
+# If the API / Subdomain are not hard coded into the config file, prompt for them
 def prompt_for_missing_credentials():
     if SYNCRO_API_KEY and SYNCRO_SUBDOMAIN:
         return SyncroConfig(SYNCRO_SUBDOMAIN, SYNCRO_API_KEY)
@@ -36,14 +37,23 @@ def prompt_for_missing_credentials():
 def main_menu():
     check_and_clear_temp_data()
     config = prompt_for_missing_credentials()
-    which_app = input("Type tickets or comments to run an import").strip().lower()
-    if which_app == "tickets":
+    
+    #print(config.api_key)
+    #print(config.subdomain)
+    #print(config.base_url)
+    #pprint(config.__dict__)
+    print("Choose your importer:")
+    print("1. Tickets")
+    print("2. Comments")
+    choice = input("Enter 1 or 2: ").strip()
+
+    if choice == "1":
         run_tickets(config)
-    elif which_app == "comments":
+    elif choice == "2":
         run_comments(config)
     else:
-        print("Invalid selection. Please enter 'tickets' or 'comments'.")
-    
+        print("Invalid selection. Please enter 1 or 2.")
+
 
 if __name__ == "__main__":
     main_menu()

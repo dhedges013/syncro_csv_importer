@@ -29,6 +29,7 @@ def syncro_api_call(config, method: str, endpoint: str, data=None, params=None) 
         params = {}
     if not data:
         data = {}
+    
 
     url = f"{config.base_url}{endpoint}"
     headers = {
@@ -105,7 +106,7 @@ def syncro_get_all_customers(config):
     try:
         customers = syncro_api_call_paginated(config, endpoint)
         customer_info = [{"id": customer.get("id"), "business_name": customer.get("business_name")} for customer in customers]
-        logger.info(f"Retrieved {len(customers)} customers: {customer_info}")       
+        logger.info(f"Retrieved {len(customers)} customers")       
         return customers
     except Exception as e:
         logger.error(f"Error fetching customers: {e}")
@@ -143,7 +144,6 @@ def syncro_get_all_techs(config):
     except Exception as e:
         logger.error(f"Error fetching techs: {e}")
         return []
-
 
 def syncro_get_ticket_data(config, ticket_id: int):
     """Fetch data for a single ticket."""
@@ -249,6 +249,7 @@ def syncro_get_ticket_statuses(config):
 
 if __name__ == "__main__":
     print("This module is not meant to be executed")
+    
 
  
     

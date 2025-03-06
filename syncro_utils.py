@@ -1,10 +1,8 @@
 import os
 import sys
-import time
 from datetime import datetime
 from dateutil import parser
 import json
-import requests
 import logging
 from typing import Any, Dict, List
 import csv
@@ -12,8 +10,6 @@ import pytz
 from collections import defaultdict
 
 from syncro_configs import (
-    SYNCRO_API_BASE_URL,
-    SYNCRO_API_KEY,
     get_logger,
     TEMP_FILE_PATH,
     SYNCRO_TIMEZONE,
@@ -27,8 +23,7 @@ from syncro_read import (
     syncro_get_issue_types,
     syncro_get_all_customers,
     syncro_get_all_contacts,
-    syncro_get_ticket_statuses,
-    increment_api_call_count
+    syncro_get_ticket_statuses    
 )
 
 _temp_data_cache = None  # Global cache for temp data
@@ -36,13 +31,12 @@ _temp_data_cache = None  # Global cache for temp data
 # Get a logger for this module
 logger = get_logger(__name__)
 
-def load_or_fetch_temp_data(logger: logging.Logger, force_refresh: bool = False, config=None) -> dict:
+def load_or_fetch_temp_data(logger: logging.Logger, config=None) -> dict:
     """
-    Load temp data from a file or fetch from Syncro API if file doesn't exist, or if force_refresh is True.
+    Load temp data from a file or fetch from Syncro API if file doesn't exist
 
     Args:
-        logger (logging.Logger): Logger instance for logging.
-        force_refresh (bool): If True, deletes the temp file and fetches new data.
+        logger (logging.Logger): Logger instance for logging.       
 
     Returns:
         dict: Dictionary containing techs, issue types, customers, and contacts.
@@ -50,7 +44,7 @@ def load_or_fetch_temp_data(logger: logging.Logger, force_refresh: bool = False,
     global _temp_data_cache  # Use a global variable to cache temp data
 
     # Handle force refresh or load from cache
-    if force_refresh and os.path.exists(TEMP_FILE_PATH):
+    if os.path.exists(TEMP_FILE_PATH):
         try:
             logger.info(f"Temp data file {TEMP_FILE_PATH} exists. Deleting it to create a new one.")
             os.remove(TEMP_FILE_PATH)
@@ -123,7 +117,7 @@ def get_customer_id_by_name(customer_name: str, config: Dict[str, Any]):#, logge
     """
     try:
         # Load temp data
-        temp_data = load_or_fetch_temp_data(logger, force_refresh=False, config=config)
+        temp_data = load_or_fetch_temp_data(logger, config=config)
         customers = temp_data.get("customers", [])
 
         if not customers:
@@ -151,42 +145,8 @@ def get_customer_id_by_name(customer_name: str, config: Dict[str, Any]):#, logge
     except Exception as e:
         logger.error(f"An unexpected error occurred in get_customer_id_by_name: {e}")
         return None
-  
-def old_want_to_delete_syncro_api_call(method: str, endpoint: str, data: dict = None, params: dict = None):
-    """
-    Generic API call to SyncroMSP.
-
-    Args:
-        method (str): HTTP method (e.g., 'POST', 'PUT', 'GET').
-        endpoint (str): API endpoint.
-        data (dict): JSON payload for the request (optional).
-        params (dict): Query parameters for the request (optional).
-
-    Returns:
-        dict: JSON response from the API.
-    """
-    
-    increment_api_call_count()
-    url = f"{SYNCRO_API_BASE_URL}{endpoint}"
-    headers = {
-        "Authorization": f"Bearer {SYNCRO_API_KEY}",
-        "accept": "application/json",
-        "Content-Type": "application/json",
-    }
-
-    try:
-        response = requests.request(method, url, headers=headers, json=data, params=params)
-        time.sleep(0.5)
-        response.raise_for_status()  # Raise HTTPError for bad responses
-        return response.json() if response.content else {}
-    except requests.HTTPError as http_err:
-        logger.error(f"HTTP error occurred: {http_err}")
-        raise
-    except requests.RequestException as req_err:
-        logger.error(f"Request error occurred: {req_err}")
-        raise
-
-def check_duplicate_customer(customer_name: str, logger: logging.Logger) -> bool:
+ 
+def check_duplicate_customer(customer_name: str, config, logger: logging.Logger) -> bool:
     """
     Check if a customer with the given name already exists using temp data.
 
@@ -204,7 +164,7 @@ def check_duplicate_customer(customer_name: str, logger: logging.Logger) -> bool
     """
     try:
         # Load temp data
-        temp_data = load_or_fetch_temp_data(logger, force_refresh=False)
+        temp_data = load_or_fetch_temp_data(logger, config)
         customers = temp_data.get("customers", [])
 
         if not customers:
@@ -253,7 +213,7 @@ def check_duplicate_contact(contact_name: str, logger: logging.Logger) -> bool:
     """
     try:
         # Load temp data
-        temp_data = load_or_fetch_temp_data(logger, force_refresh=False)
+        temp_data = load_or_fetch_temp_data(logger)
         contacts = temp_data.get("contacts", [])
 
         if not contacts:
@@ -305,7 +265,6 @@ def extract_nested_key(data: dict, key_path: str):
     return data
 
 def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.Logger = None) -> List[Dict[str, Any]]:
-
     """
     Load data from a CSV file with validation for required fields.
 
@@ -319,7 +278,7 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
 
     Raises:
         FileNotFoundError: If the file is not found.
-        ValueError: If required fields are missing in the CSV file.
+        ValueError: If required fields are missing or if any row data is blank.
     """
     if logger is None:
         logger = logging.getLogger("syncro")
@@ -329,6 +288,7 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
         with open(filepath, mode="r", encoding="utf-8") as csvfile:
             reader = csv.DictReader(csvfile)
             headers = reader.fieldnames
+
             if required_fields:
                 missing_fields = [field for field in required_fields if field not in headers]
                 if missing_fields:
@@ -336,14 +296,16 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
 
             data = []
             for row_number, row in enumerate(reader, start=1):
-                # Handle missing or blank values
-                cleaned_row = {key: (value if value else None) for key, value in row.items()}
+                cleaned_row = {}
+                for key, value in row.items():
+                    if value is None or value.strip() == "":
+                        raise ValueError(f"Row {row_number}: Empty value found in field '{key}'.")
+                    cleaned_row[key] = value
 
-                # Log warning if required fields are blank
                 if required_fields:
                     for field in required_fields:
-                        if not cleaned_row.get(field):
-                            logger.warning(f"Row {row_number}: Missing value for required field '{field}'.")
+                        if field not in cleaned_row or cleaned_row[field].strip() == "":
+                            raise ValueError(f"Row {row_number}: Missing or blank required field '{field}'.")
 
                 data.append(cleaned_row)
 
@@ -359,6 +321,135 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
     except Exception as e:
         logger.error(f"Error reading CSV file {filepath}: {e}")
         raise
+def validate_ticket_data(tickets: List[Dict[str, Any]], temp_data: Dict[str, Any], logger: logging.Logger) -> None:
+    logger.info("Validating ticket data...")
+
+    # Extract needed lists from temp_data
+    techs = temp_data.get("techs", [])
+    customers = temp_data.get("customers", [])
+    issue_types = temp_data.get("issue_types", [])
+    statuses = temp_data.get("statuses", [])
+    contacts = temp_data.get("contacts", [])
+    logger.info(f"Retrieved techs: {techs}, customers: {customers}, issue_types: {issue_types}, "
+                f"statuses: {statuses}, contacts: {contacts}")
+    
+    # Build sets of names/values to compare against
+    try:
+        tech_names = {t[1] for t in techs}
+    except Exception as e:
+        logger.error(f"Error extracting tech names: {e}")
+        raise
+    try:        
+        customer_names = {c["business_name"] for c in customers}
+    except Exception as e:
+        logger.error(f"Error extracting customer names: {e}")
+        raise
+    try:
+        issue_type_names = {i[1] for i in issue_types}
+    except Exception as e:
+        logger.error(f"Error extracting issue type names: {e}")
+        raise
+    try:
+        status_names = {s[1] for s in statuses}
+    except Exception as e:
+        logger.error(f"Error extracting status names: {e}")
+        raise    
+    try:
+        contact_names = {c["name"] for c in contacts if c["name"]}
+    except Exception as e:
+        logger.error(f"Error extracting contact names: {e}")
+        raise
+
+
+
+    for row_num, ticket in enumerate(tickets, start=1):
+        logger.info(f"Row {row_num} - Raw ticket data: {ticket}")
+
+        # Retrieve each field from the ticket
+        tech_val = ticket["tech"]
+        customer_val = ticket["ticket customer"]
+        issue_type_val = ticket["ticket issue type"]
+        status_val = ticket["ticket status"]
+        contact_val = ticket.get("ticket contact")  # or "contact", if that's the CSV header
+
+        logger.info(f"Row {row_num} - Checking tech='{tech_val}', customer='{customer_val}', "
+                     f"issue_type='{issue_type_val}', status='{status_val}', contact='{contact_val}'")
+
+        # Check Tech
+        logger.info(f"Row {row_num}: Checking tech '{tech_val}' against {tech_names}")
+
+        if tech_val not in tech_names:
+            logger.error(f"Row {row_num}: Tech '{tech_val}' not found in API cache.")
+            raise ValueError(f"Row {row_num}: Tech '{tech_val}' not found in API cache.")
+
+        # Check Customer
+        if customer_val not in customer_names:
+            logger.error(f"Row {row_num}: Customer '{customer_val}' not found in API cache.")
+            raise ValueError(f"Row {row_num}: Customer '{customer_val}' not found in API cache.")
+
+        # Check Issue Type
+        if issue_type_val not in issue_types:
+            logger.error(f"Row {row_num}: Issue type '{issue_type_val}' not found in API cache.")
+            raise ValueError(f"Row {row_num}: Issue type '{issue_type_val}' not found in API cache.")
+
+        # Check Status
+        if status_val not in statuses:
+            logger.error(f"Row {row_num}: Status '{status_val}' not found in API cache.")
+            raise ValueError(f"Row {row_num}: Status '{status_val}' not found in API cache.")
+
+        # Check Contact (warn if missing, but don’t error out)
+        if contact_val not in contact_names:
+            logger.warning(f"Row {row_num}: Contact '{contact_val}' not found in API cache.")
+
+        logger.info(f"Row {row_num} - Validation passed for this ticket.")
+
+    logger.info("All tickets validated successfully.")
+
+
+
+
+def syncro_get_all_tickets_from_csv(logger: logging.Logger = None, config: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+    """
+    Load all tickets from a CSV file and validate them against cached data.
+    """
+    required_fields = [
+        "ticket customer",
+        "ticket number",
+        "ticket subject",
+        "tech",
+        "ticket initial issue",
+        "ticket status",
+        "ticket issue type",
+        "ticket created"
+    ]
+
+    try:
+        logger.info("Checking and Creating _temp_data_cache from API...")
+        temp_data = load_or_fetch_temp_data(logger,config)
+
+        logger.info("Attempting to load tickets from CSV...")
+        tickets = load_csv(TICKETS_CSV_PATH, required_fields=required_fields, logger=logger)
+
+        # Validate data
+        validate_ticket_data(tickets, temp_data, logger)
+
+        logger.info(f"Successfully loaded {len(tickets)} tickets from {TICKETS_CSV_PATH}.")
+        return tickets
+
+    except FileNotFoundError:
+        logger.error(f"CSV file not found: {TICKETS_CSV_PATH}")
+        raise
+    except ValueError as e:
+        logger.error(f"Validation error in CSV file: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while loading tickets: {e}")
+        raise
+
+
+
+
+
 
 def clean_syncro_ticket_number(ticketNumber: str) -> str:
     """
@@ -713,7 +804,7 @@ def get_syncro_issue_type(issue_type: str):
     """
     try:
         # Load temp data
-        temp_data = load_or_fetch_temp_data(logger, force_refresh=False)
+        temp_data = load_or_fetch_temp_data(logger)
         issue_types = temp_data.get("issue_types", [])
 
         if not issue_types:
@@ -741,48 +832,6 @@ def get_syncro_issue_type(issue_type: str):
     except Exception as e:
         logger.error(f"Error occurred while matching issue type '{issue_type}': {e}")
         return None
-
-def syncro_get_all_tickets_from_csv(logger: logging.Logger = None) -> List[Dict[str, Any]]:
-    """
-    Load all tickets from a CSV file.
-
-    Args:
-        logger (logging.Logger, optional): Logger instance for logging.
-
-    Returns:
-        List[Dict[str, Any]]: A list of dictionaries, where each dictionary represents a ticket.
-
-    Raises:
-        Exception: If loading tickets fails for any reason.
-    """  
-    required_fields = [
-        "ticket customer",
-        "ticket number",
-        "ticket subject",
-        "tech",
-        "ticket initial issue",
-        "ticket status",
-        "ticket issue type",
-        "ticket created"
-    ]
-
-    try:
-        logger.info("Attempting to load tickets from CSV...")
-        tickets = load_csv(TICKETS_CSV_PATH, required_fields=required_fields, logger=logger)
-        logger.info(f"Successfully loaded {len(tickets)} tickets from {TICKETS_CSV_PATH}.")
-        return tickets
-
-    except FileNotFoundError:
-        logger.error(f"CSV file not found: {TICKETS_CSV_PATH}")
-        raise
-
-    except ValueError as e:
-        logger.error(f"Validation error in CSV file: {e}")
-        raise
-
-    except Exception as e:
-        logger.error(f"An unexpected error occurred while loading tickets: {e}")
-        raise
 
 def syncro_get_all_comments_from_csv(logger: logging.Logger = None) -> List[Dict[str, Any]]:
     """
@@ -1036,7 +1085,6 @@ def syncro_prepare_ticket_json(ticket,config):
     # Remove keys with None values
     ticket_json = {key: value for key, value in ticket_json.items() if value is not None}
     return ticket_json
-
 
 def syncro_prepare_comments_json(comment):
     """

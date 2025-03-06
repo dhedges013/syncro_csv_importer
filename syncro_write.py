@@ -30,7 +30,7 @@ def syncro_create_customer(config,customer_data: dict):
     new_customer = {"business_name": customer_data.get("business_name")}
     customer_name = list(new_customer.values())[0]
 
-    duplicate = check_duplicate_customer(customer_name )
+    duplicate = check_duplicate_customer(customer_name,config)
     
     if duplicate:
         logger.warning(f"Duplicate customer found: {duplicate}")

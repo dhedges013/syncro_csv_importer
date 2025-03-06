@@ -2,12 +2,12 @@ from syncro_utils import  syncro_get_all_tickets_from_csv, syncro_prepare_ticket
 from syncro_write import syncro_create_ticket
 from syncro_read import get_api_call_count
 from syncro_configs import get_logger
-from pprint import pprint
+
 
 logger = get_logger(__name__)
 def run_tickets(config):
     try:
-        tickets = syncro_get_all_tickets_from_csv(logger)        
+        tickets = syncro_get_all_tickets_from_csv(logger,config)        
         logger.info(f"Loaded tickets: {len(tickets)}")
     except Exception as e:
         logger.critical(f"Failed to load tickets: {e}")
