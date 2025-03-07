@@ -56,7 +56,7 @@ def load_or_fetch_temp_data(logger: logging.Logger, config=None) -> dict:
 
     # Check if data is already cached in memory
     if _temp_data_cache:
-        logger.info("Using cached temp data.")
+        logger.debug("Using cached temp data.")
         return _temp_data_cache
 
     # Check if temp file exists
@@ -134,7 +134,7 @@ def get_customer_id_by_name(customer_name: str, config: Dict[str, Any]):#, logge
             customer_name_in_list = customer.get("business_name", "").strip().lower()
             if customer_name_in_list == normalized_customer_name:
                 customer_id = customer.get("id")
-                logger.info(f"Match found: Customer '{customer_name}' matches '{customer['business_name']}' with ID {customer_id}")
+                logger.debug(f"Match found: Customer '{customer_name}' matches '{customer['business_name']}' with ID {customer_id}")
                 return customer_id
 
         logger.warning(f"Customer not found: {customer_name}")
@@ -179,15 +179,15 @@ def check_duplicate_customer(customer_name: str, config, logger: logging.Logger)
         # Extract and normalize business names from customers
         business_names = [customer.get("business_name", "").strip().lower() for customer in customers]
 
-        logger.info(f"Retrieved normalized business names: {business_names}")
-        logger.info(f"Checking for duplicate customer: {customer_name}")
+        logger.debug(f"Retrieved normalized business names: {business_names}")
+        logger.debug(f"Checking for duplicate customer: {customer_name}")
 
         # Check for duplicate
         if normalized_customer_name in business_names:
             logger.warning(f"Duplicate customer found: {customer_name}")
             return True
 
-        logger.info(f"No duplicate found for customer: {customer_name}")
+        logger.debug(f"No duplicate found for customer: {customer_name}")
         return False
 
     except KeyError as e:
@@ -228,15 +228,15 @@ def check_duplicate_contact(contact_name: str, logger: logging.Logger) -> bool:
         # Extract and normalize contact names
         contact_names = [contact.get("name", "").strip().lower() for contact in contacts]
 
-        logger.info(f"Retrieved normalized contact names: {contact_names}")
-        logger.info(f"Checking for duplicate contact: {contact_name}")
+        logger.debug(f"Retrieved normalized contact names: {contact_names}")
+        logger.debug(f"Checking for duplicate contact: {contact_name}")
 
         # Check for duplicate
         if normalized_contact_name in contact_names:
             logger.warning(f"Duplicate contact found: {contact_name}")
             return True
 
-        logger.info(f"No duplicate found for contact: {contact_name}")
+        logger.debug(f"No duplicate found for contact: {contact_name}")
         return False
 
     except KeyError as e:
@@ -286,7 +286,7 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
         logger = logging.getLogger("syncro")
 
     try:
-        logger.info(f"Loading data from CSV file: {filepath}")
+        logger.debug(f"Loading data from CSV file: {filepath}")
         with open(filepath, mode="r", encoding="utf-8") as csvfile:
             reader = csv.DictReader(csvfile)
             headers = reader.fieldnames
@@ -311,7 +311,7 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
 
                 data.append(cleaned_row)
 
-            logger.info(f"Successfully loaded {len(data)} rows from {filepath}.")
+            logger.debug(f"Successfully loaded {len(data)} rows from {filepath}.")
             return data
 
     except FileNotFoundError:
@@ -432,7 +432,7 @@ def syncro_get_all_tickets_from_csv(logger: logging.Logger = None, config: Dict[
         # Validate data
         validate_ticket_data(tickets, temp_data, logger)
 
-        logger.info(f"Successfully loaded {len(tickets)} tickets from {TICKETS_CSV_PATH}.")
+        logger.debug(f"Successfully loaded {len(tickets)} tickets from {TICKETS_CSV_PATH}.")
         return tickets
 
     except FileNotFoundError:
@@ -465,8 +465,8 @@ def clean_syncro_ticket_number(ticketNumber: str) -> str:
         cleaned_ticket_number = ''.join(filter(str.isdigit, ticketNumber))
 
         # Log the original and cleaned ticket number
-        logger.info(f"Original ticket number: {ticketNumber}")
-        logger.info(f"Cleaned ticket number: {cleaned_ticket_number}")
+        logger.debug(f"Original ticket number: {ticketNumber}")
+        logger.debug(f"Cleaned ticket number: {cleaned_ticket_number}")
 
         return cleaned_ticket_number
 
@@ -518,7 +518,7 @@ def get_syncro_tech(tech_name: str):
                 continue
 
             if tech_name_in_list == normalized_tech_name:
-                logger.info(f"Match found: Tech '{tech_name}' matches '{tech_name_in_list}' with ID {tech_id}")
+                logger.debug(f"Match found: Tech '{tech_name}' matches '{tech_name_in_list}' with ID {tech_id}")
                 return str(tech_id)
 
         # Log a warning if the technician is not found
@@ -597,7 +597,7 @@ def get_syncro_created_date(created: str) -> str:
         - Error if the input cannot be processed.
     """
     try:
-        logger.info(f"Attempting to parse and format date: {created}")
+        logger.debug(f"Attempting to parse and format date: {created}")
 
         formats = [
             "%Y-%m-%d",          # Date only (YYYY-MM-DD)
@@ -625,7 +625,7 @@ def get_syncro_created_date(created: str) -> str:
 
         # Set time to midnight if not specified
         if parsed_date.hour == 0 and parsed_date.minute == 0 and parsed_date.second == 0:
-            logger.info(f"Time missing, setting to midnight: {parsed_date}")
+            logger.warning(f"Time missing, setting to midnight: {parsed_date}")
 
         # Localize the date to SYNCRO_TIMEZONE
         local_timezone = pytz.timezone(SYNCRO_TIMEZONE)
@@ -634,7 +634,7 @@ def get_syncro_created_date(created: str) -> str:
         # Format the date with timezone offset
         formatted_date = localized_date.strftime("%Y-%m-%dT%H:%M:%S%z")
 
-        logger.info(f"Formatted date with timezone offset: {formatted_date}")
+        logger.debug(f"Formatted date with timezone offset: {formatted_date}")
         return formatted_date
 
     except ValueError as ve:
@@ -672,7 +672,7 @@ def get_syncro_customer_contact(customerid: str, contact: str):
         contacts_data = temp_data.get("contacts", [])
 
         # Log the search process
-        logger.info(f"Looking up customer ID for customer: {customerid}")
+        logger.debug(f"Looking up customer ID for customer: {customerid}")
 
         if not customerid:
             logger.error(f"For Contact Lookup you need the Customer ID. Customer '{customerid}' not found.")
@@ -694,13 +694,14 @@ def get_syncro_customer_contact(customerid: str, contact: str):
             for c in customer_contacts
             if c.get("name") and c.get("id")
         }
-
-        logger.info(f"Contact Lookup: Normalized input contact: {normalized_input_contact}")
-        logger.info(f"Contact Lookup: Normalized filtered contacts: {normalized_filtered_contacts}")
+        
+        logger.debug(f"number of contacts found was {len(normalized_filtered_contacts)}")
+        logger.debug(f"Contact Lookup: Normalized input contact: {normalized_input_contact}")
+        logger.debug(f"Contact Lookup: Normalized filtered contacts: {normalized_filtered_contacts}")
 
         # Check for an exact match
         if normalized_input_contact in normalized_filtered_contacts:
-            logger.info(f"Match found for contact '{contact}' in customer ID: {customerid}")           
+            logger.debug(f"Match found for contact '{contact}' in customer ID: {customerid}")           
             found_contact_id = normalized_filtered_contacts[normalized_input_contact].get("id")
 
             return found_contact_id
@@ -749,7 +750,7 @@ def get_syncro_priority(priority: str) -> str:
         matched_priority = priority_map.get(normalized_priority)
 
         if matched_priority:
-            logger.info(f"Priority '{priority}' matched to '{matched_priority}'")
+            logger.debug(f"Priority '{priority}' matched to '{matched_priority}'")
             return matched_priority
         else:
             logger.warning(f"NON Standard Priority was passed in: {priority}, defaulting to '2 Normal'.")
@@ -792,7 +793,7 @@ def get_syncro_issue_type(issue_type: str):
         # Search for a match in the retrieved issue types
         for syncro_issue_type in issue_types:
             if syncro_issue_type.strip().lower() == normalized_issue_type:
-                logger.info(f"Match found: Input '{issue_type}' matches Syncro issue type '{syncro_issue_type}'.")
+                logger.debug(f"Match found: Input '{issue_type}' matches Syncro issue type '{syncro_issue_type}'.")
                 return syncro_issue_type
 
         # Log a warning if no match is found

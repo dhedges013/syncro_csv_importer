@@ -6,6 +6,8 @@ from syncro_utils import check_duplicate_customer, check_duplicate_contact
 from syncro_configs import get_logger
 from syncro_read import syncro_get_all_contacts,syncro_api_call, get_syncro_ticket_by_number
 
+from syncro_logging_configs import main_logger, ticket_creation_error_logger
+
 # Add parent directory to sys.path for imports
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_dir)
@@ -89,7 +91,9 @@ def syncro_create_ticket(ticket_data: dict,config) -> dict:
             # Check if the ticket number already exists
             existing_ticket = get_syncro_ticket_by_number(ticket_number,config)
             if existing_ticket:
-                logger.warning(f"Ticket number '{ticket_number}' already taken. ")
+                logger.warning(f"Ticket number '{ticket_number}' already taken. Skipping ticket creation.")                
+                ticket_creation_error_logger.error(f"ERROR: {ticket_data}")
+                return None
             else:
                 logger.info(f"Ticket number '{ticket_number}' is available.")         
             

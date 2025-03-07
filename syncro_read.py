@@ -74,7 +74,7 @@ def syncro_api_call_paginated(config, endpoint: str, params=None) -> list:
     all_data = []
     current_page = 1
 
-    logger.info(f"Starting to fetch data from {endpoint}")
+    logger.debug(f"Starting to fetch data from {endpoint}")
 
     while True:
         params["page"] = current_page
@@ -89,7 +89,7 @@ def syncro_api_call_paginated(config, endpoint: str, params=None) -> list:
         page_data = response.get(key, [])
 
         all_data.extend(page_data)
-        logger.info(f"Fetched {len(page_data)} records from page {current_page}.")
+        logger.debug(f"Fetched {len(page_data)} records from page {current_page}.")
 
         meta = response.get("meta", {})
         if meta.get("page", 1) >= meta.get("total_pages", 1):
@@ -97,7 +97,7 @@ def syncro_api_call_paginated(config, endpoint: str, params=None) -> list:
 
         current_page += 1
 
-    logger.info(f"Finished fetching data from {endpoint}, total records: {len(all_data)}.")
+    logger.debug(f"Finished fetching data from {endpoint}, total records: {len(all_data)}.")
     return all_data
 
 def syncro_get_all_customers(config):
@@ -106,7 +106,7 @@ def syncro_get_all_customers(config):
     try:
         customers = syncro_api_call_paginated(config, endpoint)
         customer_info = [{"id": customer.get("id"), "business_name": customer.get("business_name")} for customer in customers]
-        logger.info(f"Retrieved {len(customers)} customers")       
+        logger.debug(f"Retrieved {len(customers)} customers")       
         return customers
     except Exception as e:
         logger.error(f"Error fetching customers: {e}")
@@ -117,7 +117,7 @@ def syncro_get_all_contacts(config):
     endpoint = '/contacts'
     try:        
         contacts = syncro_api_call_paginated(config, endpoint)
-        logger.info(f"Retrieved {len(contacts)} contacts")
+        logger.debug(f"Retrieved {len(contacts)} contacts")
         return contacts
     except Exception as e:
         logger.error(f"Error fetching contacts: {e}")
@@ -127,7 +127,7 @@ def syncro_get_all_tickets(config):
     endpoint = '/tickets'
     try:        
         tickets = syncro_api_call_paginated(config, endpoint)
-        logger.info(f"Retrieved {len(tickets)} tickets: {tickets}")
+        logger.debug(f"Retrieved {len(tickets)} tickets: {tickets}")
         return tickets
     except Exception as e:
         logger.error(f"Error fetching tickets: {e}")
@@ -138,7 +138,7 @@ def syncro_get_all_techs(config):
     endpoint = '/users'
     try:   
         techs = syncro_api_call_paginated(config, endpoint)      
-        logger.info(f"Retrieved {len(techs)} techs: {techs}")        
+        logger.debug(f"Retrieved {len(techs)} techs: {techs}")        
         return techs
 
     except Exception as e:
@@ -151,7 +151,7 @@ def syncro_get_ticket_data(config, ticket_id: int):
     try:
         ticket_data = syncro_api_call(config, "GET", endpoint)
         ticket = ticket_data.get("ticket", {})
-        logger.info(f"Retrieved data for ticket {ticket_id}")
+        logger.debug(f"Retrieved data for ticket {ticket_id}")
         return ticket
     except Exception as e:
         logger.error(f"Error retrieving ticket {ticket_id}: {e}")
@@ -169,7 +169,7 @@ def get_syncro_ticket_by_number(ticket_number: str,config) -> dict:
         # Handle the response
         if response and "tickets" in response and len(response["tickets"]) > 0:
             ticket = response["tickets"][0]
-            logger.info(f"Successfully retrieved ticket: {ticket.get('number')}")
+            logger.debug(f"Successfully retrieved ticket: {ticket.get('number')}")
             return ticket
         logger.warning(f"No ticket found with number: {ticket_number}")
         return None

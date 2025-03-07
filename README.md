@@ -49,6 +49,12 @@ combined_ticket and comment JSON builders doesnt account for:
 - When creating a new ticket, the **initial issue timestamp** will be set at the time of import.  
 - The **ticket itself** will have the correct created date.
 
+## Issue List
+
+3.6.25
+pagination and contact cacheing did not work for a customer with 600 contacts
+Build Initial issue still giving me trouble
+
 
 
 ## Done List
@@ -57,3 +63,8 @@ combined_ticket and comment JSON builders doesnt account for:
 Added CLI options to run the tool. Will prompt for subdomain and API Key
 Added option for doing Intial Ticket Import or Comment Import but typing a 1 or a 2 from a menu select
 Added Data Validation when loading in CSV Data so it cannot be blank
+
+3.6.25
+Updated Contact Lookup to work correctly * but still having issues with pagination
+Flexiblity added with debug/info/warrning. Most things set to debug level
+started working on seperate logging for major errors with a new syncro_logging_configs

@@ -8,6 +8,7 @@ from main_comments import run_comments
 logger = get_logger(__name__)
 
 
+
 def check_and_clear_temp_data():
     """Check if syncro_temp_data.json exists and prompt user to delete it."""
     if os.path.exists(TEMP_FILE_PATH):
