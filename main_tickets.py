@@ -7,16 +7,16 @@ from syncro_configs import get_logger
 logger = get_logger(__name__)
 def run_tickets(config):
     try:
-        tickets = syncro_get_all_tickets_from_csv(logger,config)        
+        tickets = syncro_get_all_tickets_from_csv(config)        
         logger.info(f"Loaded tickets: {len(tickets)}")
     except Exception as e:
         logger.critical(f"Failed to load tickets: {e}")
 
     for ticket in tickets:
-        ticket_json = syncro_prepare_ticket_json(ticket,config)
+        ticket_json = syncro_prepare_ticket_json(config,ticket)
         logger.info(f"Attempting to create Ticket: {ticket_json}")
 
-        syncro_create_ticket(ticket_json,config)
+        syncro_create_ticket(config,ticket_json)
     api_call_count = get_api_call_count()
     logger.info(f"Total API calls made during program run: {api_call_count}")
         

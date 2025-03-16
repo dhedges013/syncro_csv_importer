@@ -11,7 +11,7 @@ COMBINED_TICKETS_COMMENTS_CSV_PATH = "tickets_and_comments_combined.csv"
 
 # Syncro API Configuration
 SYNCRO_SUBDOMAIN = "hedgesmsp"
-SYNCRO_API_KEY = "Tba59751e300037f08-f5e054122a3af34f43ba003062676640"
+SYNCRO_API_KEY = "Te569accf4cb23c55f-285e3e6a36dfdaf1290951ede3262152"
 
 SYNCRO_API_BASE_URL = f"https://{SYNCRO_SUBDOMAIN}.syncromsp.com/api/v1"
 
@@ -19,32 +19,22 @@ SYNCRO_API_BASE_URL = f"https://{SYNCRO_SUBDOMAIN}.syncromsp.com/api/v1"
 LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "logs"))
 os.makedirs(LOG_DIR, exist_ok=True)
 
+# Define a fixed log file name instead of generating a new one each time
+LOG_FILE_PATH = os.path.join(LOG_DIR, f"app_{datetime.now().strftime('%Y%m%d')}.log")
+
+
+def setup_logging(log_level=logging.INFO):
+    """Initialize logging with a specified log level."""
+    logging.basicConfig(
+        level=log_level,  # Set dynamically
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler(LOG_FILE_PATH, encoding="utf-8"),  # File logging
+            logging.StreamHandler()  # Console logging
+        ],
+    )
+
 def get_logger(name):
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
+    return logging.getLogger(name)
 
-    # Create a new log file with the current date and time
-    log_file_name = f"app_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-    log_file_path = os.path.join(LOG_DIR, log_file_name)
 
-    # File handler with UTF-8 encoding
-    file_handler = logging.FileHandler(log_file_path, encoding="utf-8")
-    file_handler.setLevel(logging.INFO)
-
-    # Log format
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    file_handler.setFormatter(formatter)
-
-    # Remove other handlers to prevent duplicate logs
-    if logger.hasHandlers():
-        logger.handlers.clear()
-
-    logger.addHandler(file_handler)
-
-    # Prevent logs from propagating to the root logger
-    logger.propagate = False
-
-    return logger
-
-# Reset root logger to prevent console logging
-logging.getLogger().handlers.clear()

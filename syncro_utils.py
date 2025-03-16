@@ -31,7 +31,7 @@ _temp_data_cache = None  # Global cache for temp data
 # Get a logger for this module
 logger = get_logger(__name__)
 
-def load_or_fetch_temp_data(logger: logging.Logger, config=None) -> dict:
+def load_or_fetch_temp_data(config=None) -> dict:
     """
     Load temp data from a file or fetch from Syncro API if file doesn't exist
 
@@ -42,17 +42,6 @@ def load_or_fetch_temp_data(logger: logging.Logger, config=None) -> dict:
         dict: Dictionary containing techs, issue types, customers, and contacts.
     """
     global _temp_data_cache  # Use a global variable to cache temp data
-
-    # Handle force refresh or load from cache
-    '''
-    if os.path.exists(TEMP_FILE_PATH):
-        try:
-            logger.info(f"Temp data file {TEMP_FILE_PATH} exists. Deleting it to create a new one.")
-            os.remove(TEMP_FILE_PATH)
-        except Exception as e:
-            logger.error(f"Failed to delete temp data file: {e}")
-            raise
-    '''
 
     # Check if data is already cached in memory
     if _temp_data_cache:
@@ -119,7 +108,7 @@ def get_customer_id_by_name(customer_name: str, config: Dict[str, Any]):#, logge
     """
     try:
         # Load temp data
-        temp_data = load_or_fetch_temp_data(logger, config=config)
+        temp_data = load_or_fetch_temp_data(config=config)
         customers = temp_data.get("customers", [])
 
         if not customers:
@@ -148,7 +137,7 @@ def get_customer_id_by_name(customer_name: str, config: Dict[str, Any]):#, logge
         logger.error(f"An unexpected error occurred in get_customer_id_by_name: {e}")
         return None
  
-def check_duplicate_customer(customer_name: str, config, logger: logging.Logger) -> bool:
+def check_duplicate_customer(config,customer_name: str) -> bool:
     """
     Check if a customer with the given name already exists using temp data.
 
@@ -166,7 +155,7 @@ def check_duplicate_customer(customer_name: str, config, logger: logging.Logger)
     """
     try:
         # Load temp data
-        temp_data = load_or_fetch_temp_data(logger, config)
+        temp_data = load_or_fetch_temp_data(config)
         customers = temp_data.get("customers", [])
 
         if not customers:
@@ -215,7 +204,7 @@ def check_duplicate_contact(contact_name: str, logger: logging.Logger) -> bool:
     """
     try:
         # Load temp data
-        temp_data = load_or_fetch_temp_data(logger)
+        temp_data = load_or_fetch_temp_data()
         contacts = temp_data.get("contacts", [])
 
         if not contacts:
@@ -407,7 +396,7 @@ def validate_ticket_data(tickets: List[Dict[str, Any]], temp_data: Dict[str, Any
 
     logger.info("All tickets validated successfully.")
 
-def syncro_get_all_tickets_from_csv(logger: logging.Logger = None, config: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+def syncro_get_all_tickets_from_csv(config: Dict[str, Any] = None) -> List[Dict[str, Any]]:
     """
     Load all tickets from a CSV file and validate them against cached data.
     """
@@ -424,7 +413,7 @@ def syncro_get_all_tickets_from_csv(logger: logging.Logger = None, config: Dict[
 
     try:
         logger.info("Checking and Creating _temp_data_cache from API...")
-        temp_data = load_or_fetch_temp_data(logger,config)
+        temp_data = load_or_fetch_temp_data(config)
 
         logger.info("Attempting to load tickets from CSV...")
         tickets = load_csv(TICKETS_CSV_PATH, required_fields=required_fields, logger=logger)
@@ -488,7 +477,7 @@ def get_syncro_tech(tech_name: str):
     """
     try:
         # Load temp data
-        temp_data = load_or_fetch_temp_data(logger)
+        temp_data = load_or_fetch_temp_data()
         techs = temp_data.get("techs", [])
 
         # Check if tech data exists
@@ -668,7 +657,7 @@ def get_syncro_customer_contact(customerid: str, contact: str):
             return None
 
         # Load temp data
-        temp_data = load_or_fetch_temp_data(logger)
+        temp_data = load_or_fetch_temp_data()
         contacts_data = temp_data.get("contacts", [])
 
         # Log the search process
@@ -779,7 +768,7 @@ def get_syncro_issue_type(issue_type: str):
     """
     try:
         # Load temp data
-        temp_data = load_or_fetch_temp_data(logger)
+        temp_data = load_or_fetch_temp_data()
         issue_types = temp_data.get("issue_types", [])
 
         if not issue_types:
@@ -808,7 +797,7 @@ def get_syncro_issue_type(issue_type: str):
         logger.error(f"Error occurred while matching issue type '{issue_type}': {e}")
         return None
 
-def syncro_get_all_comments_from_csv(logger: logging.Logger = None) -> List[Dict[str, Any]]:
+def syncro_get_all_comments_from_csv() -> List[Dict[str, Any]]:
     """
     Load all comments from a CSV file.
 
@@ -1009,7 +998,7 @@ def syncro_prepare_ticket_combined_comment_json(comment):
     comment_json = {key: value for key, value in comment_json.items() if value is not None}
 
     return comment_json
-def syncro_prepare_ticket_json(ticket,config):
+def syncro_prepare_ticket_json(config,ticket):
     """
     Extract ticket data into variables and create a JSON package for Syncro ticket creation.
     Removes fields with None values.
@@ -1072,35 +1061,27 @@ def syncro_prepare_comments_json(comment):
         dict: JSON payload for Syncro ticket creation.
     """    
     required_fields = [        
-        "ticket number",                        
+        "ticket number", 
+        "comment subject",                       
         "ticket comment",
         "comment contact",
         "comment created"
     ]
 
-    # Extract individual fields
-
-    
-   
-    """
-    #customer = comment.get("ticket customer") #need for contact lookup
-    #customer_id = get_customer_id_by_name(customer)
-    syncro_ticket_number = clean_syncro_ticket_number(ticket_number) 
-    #subject = comment.get("ticket subject")
-    """  
+    # Extract individual fields 
     ticket_number = comment.get("ticket number") 
+    comment_subject = comment.get("comment subject")
     ticket_comment = comment.get("ticket comment") # I tried but it didnt work
     comment_created =  comment.get("comment created")       
     comment_contact = comment.get("comment contact") # System, Daniel Hedges, Sally Joe
 
     # Process fields
-    #ticket_comment = build_syncro_initial_issue(ticket_comment, comment_contact)
     syncro_created_date = parse_comment_created(comment_created)
 
     # Create JSON payload
     comment_json = {
         "ticket_number": ticket_number,
-        "subject": "API Import",
+        "subject": comment_subject,
         "created_at": syncro_created_date,
         "tech": comment_contact,
         "body": ticket_comment,

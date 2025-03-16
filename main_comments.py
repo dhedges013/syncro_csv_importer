@@ -7,10 +7,10 @@ from syncro_configs import get_logger
 
 
 def run_comments(config):
-    logger = get_logger("main")
+    logger = get_logger(__name__)
 
     try:
-        comments = syncro_get_all_comments_from_csv(logger)  
+        comments = syncro_get_all_comments_from_csv()  
         
         logger.info(f"Loaded comments: {len(comments)}")
     except Exception as e:
@@ -19,7 +19,7 @@ def run_comments(config):
     for comment in comments:
         comment_json = syncro_prepare_comments_json(comment)        
         logger.info(f"Attempting to create Comment: {comment_json}")
-        syncro_create_comment(comment_json,config)
+        syncro_create_comment(config,comment_json)
     
     
     api_call_count = get_api_call_count()

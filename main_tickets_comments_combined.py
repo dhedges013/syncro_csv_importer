@@ -52,12 +52,5 @@ def main():
 
             logger.info(f"Completed Ticket {ticket_number}")  
 
-
-
-
-            
-
-
-
 if __name__ == "__main__":
     main()

@@ -157,7 +157,7 @@ def syncro_get_ticket_data(config, ticket_id: int):
         logger.error(f"Error retrieving ticket {ticket_id}: {e}")
         return None
 
-def get_syncro_ticket_by_number(ticket_number: str,config) -> dict:
+def get_syncro_ticket_by_number(config,ticket_number: str) -> dict:
     """Retrieve a Syncro ticket by its number. """
     endpoint = "/tickets"
     try:

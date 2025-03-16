@@ -6,8 +6,6 @@ from syncro_utils import check_duplicate_customer, check_duplicate_contact
 from syncro_configs import get_logger
 from syncro_read import syncro_get_all_contacts,syncro_api_call, get_syncro_ticket_by_number
 
-from syncro_logging_configs import main_logger, ticket_creation_error_logger
-
 # Add parent directory to sys.path for imports
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_dir)
@@ -32,7 +30,7 @@ def syncro_create_customer(config,customer_data: dict):
     new_customer = {"business_name": customer_data.get("business_name")}
     customer_name = list(new_customer.values())[0]
 
-    duplicate = check_duplicate_customer(customer_name,config)
+    duplicate = check_duplicate_customer(config,customer_name)
     
     if duplicate:
         logger.warning(f"Duplicate customer found: {duplicate}")
@@ -46,7 +44,7 @@ def syncro_create_customer(config,customer_data: dict):
         logger.error("Failed to create customer.")
     return response
 
-def syncro_create_contact(contact_data: dict):
+def syncro_create_contact(config,contact_data: dict) -> dict:
     """
     Create a new contact in SyncroMSP.
 
@@ -69,7 +67,7 @@ def syncro_create_contact(contact_data: dict):
         logger.error("Failed to create contact.")
     return response
 
-def syncro_create_ticket(ticket_data: dict,config) -> dict:
+def syncro_create_ticket(config,ticket_data: dict) -> dict:
     """
     Create a new ticket in SyncroMSP using the specified fields.
 
@@ -89,17 +87,21 @@ def syncro_create_ticket(ticket_data: dict,config) -> dict:
             ticket_number = None          
         else:
             # Check if the ticket number already exists
-            existing_ticket = get_syncro_ticket_by_number(ticket_number,config)
+            existing_ticket = get_syncro_ticket_by_number(config,ticket_number)
             if existing_ticket:
                 logger.warning(f"Ticket number '{ticket_number}' already taken. Skipping ticket creation.")                
-                ticket_creation_error_logger.error(f"ERROR: {ticket_data}")
+                logger.error(f"ERROR: {ticket_data}")
                 return None
             else:
                 logger.info(f"Ticket number '{ticket_number}' is available.")         
             
         # Prepare the ticket payload using the provided fields
         payload = ticket_data
-        comments_attributes = payload.get("comments_attributes", [])
+
+        try:
+            comments_attributes = payload.get("comments_attributes", [])
+        except Exception as e:
+            logger.error(f"Error getting comments attributes: {e}")
         
         logger.info(f"Creating a ticket with payload: {payload}")  
         try:
@@ -113,8 +115,10 @@ def syncro_create_ticket(ticket_data: dict,config) -> dict:
                 try:
 
                     logger.info(f"adding ticket number to intial issue ")
+
                     comments_attributes[0]["ticket_number"] = ticket_number
-                    comment_response = syncro_create_comment(config, comments_attributes)
+
+                    comment_response = syncro_create_comment(config,comments_attributes)
                     if comment_response:
                         logger.info(f"Successfully created comment for ticket: {ticket_number}")
                     else:
@@ -140,8 +144,7 @@ def syncro_create_ticket(ticket_data: dict,config) -> dict:
         logger.error(f"Unexpected error occurred while creating ticket: {e}")
         return None
 
-
-def syncro_create_comment(comment_data: dict,config) -> dict:
+def syncro_create_comment(config,comment_data: dict) -> dict:
     """
     Create a new comment in SyncroMSP using the specified fields.
 
@@ -157,6 +160,7 @@ def syncro_create_comment(comment_data: dict,config) -> dict:
             comment_data = comment_data[0]
         else:
             logger.info("Creating Comment Function:Comment data is not a list, Creating a single comment.")
+            logger.debug(f"Comment data: {comment_data}")
             comment_data = comment_data
 
         ticket_number = comment_data.get("ticket_number")
@@ -166,7 +170,7 @@ def syncro_create_comment(comment_data: dict,config) -> dict:
             return None
 
         # Check if the ticket number already exists
-        existing_ticket = get_syncro_ticket_by_number(ticket_number,config)
+        existing_ticket = get_syncro_ticket_by_number(config,ticket_number)
         if existing_ticket is None:
             logger.warning(f"Creating Comment Function: Ticket number '{ticket_number}' is not found. Skipping comment creation.")
             return None
@@ -190,18 +194,13 @@ def syncro_create_comment(comment_data: dict,config) -> dict:
             logger.info(f"Creating Comment Function: No existing comments for ticket number '{ticket_number}'.")
             
 
-        endpoint = f"/tickets/{ticket_id}/comment"
-        
-        
-        # Prepare the ticket payload using the provided fields
-        #payload = comment_data
+        endpoint = f"/tickets/{ticket_id}/comment"       
+
         # Convert datetime objects to strings in ISO format
         payload = {key: (value.isoformat() if isinstance(value, datetime) else value) for key, value in comment_data.items()}
 
-
         # Log the prepared payload
         logger.info(f"Creating a comment with payload: {payload}")
-        #response = syncro_api_call("POST", endpoint, data=payload)
         response = syncro_api_call(config,"POST", endpoint,data=payload)
         
         # Handle the response
@@ -223,8 +222,6 @@ def syncro_create_comment(comment_data: dict,config) -> dict:
         # Log unexpected errors
         logger.error(f"Unexpected error occurred while creating ticket: {e}")
         return None
-
-
 
 if __name__ == "__main__":
     print("This module is not intended to be run directly.")
