@@ -55,32 +55,32 @@ Importer doesnt account for:
 ## Known Issue List
 
 3.16.25 update
-testing with 500 contacts under one customer looked up worked
+- testing with 500 contacts under one customer looked up worked
 
 3.6.25
-pagination and contact cacheing did not work for a customer with 600 contacts
+- pagination and contact cacheing did not work for a customer with 600 contacts
 
 
 ## Done List
 
 3.16.25
-Reworked the logging and made it simpler instead of having seperate logging files; Logs will now print to same file
-Cleaned up passing around the "logger" inbetween functions, which is not required.
-Cleaned up and unified how they config object is passed inbetween functions. it shou\ld always be the first variable passed in.
-Fixed issue with Intial Issue, not importing on ticket creation with tickets.csv
-Updated template for comments - changed "ticket subject" to "comment subject"
-added _pause variable for rest inbetween API calls in the syncro_read.py file
-updated data validation to better handle lowercase and upper case mismatches
-NOTE: Ticket Status cannot be normalized and Case mismatch will throw a validation error
+- Reworked the logging and made it simpler instead of having seperate logging files; Logs will now print to same file
+- Cleaned up passing around the "logger" inbetween functions, which is not required.
+- Cleaned up and unified how they config object is passed inbetween functions. it shou\ld always be the first variable passed in.
+- Fixed issue with Intial Issue, not importing on ticket creation with tickets.csv
+- Updated template for comments - changed "ticket subject" to "comment subject"
+- added _pause variable for rest inbetween API calls in the syncro_read.py file
+- updated data validation to better handle lowercase and upper case mismatches
+- NOTE: Ticket Status cannot be normalized and Case mismatch will throw a validation error
 
 3.6.25
-Updated Contact Lookup to work correctly * but still having issues with pagination
-Flexiblity added with debug/info/warrning. Most things set to debug level
-started working on seperate logging for major errors with a new syncro_logging_configs
+- Updated Contact Lookup to work correctly * but still having issues with pagination
+- Flexiblity added with debug/info/warrning. Most things set to debug level
+- started working on seperate logging for major errors with a new syncro_logging_configs
 
 3.5.25
-Added CLI options to run the tool. Will prompt for subdomain and API Key
-Added option for doing Intial Ticket Import or Comment Import but typing a 1 or a 2 from a menu select
-Added Data Validation when loading in CSV Data so it cannot be blank
+- Added CLI options to run the tool. Will prompt for subdomain and API Key
+- Added option for doing Intial Ticket Import or Comment Import but typing a 1 or a 2 from a menu select
+- Added Data Validation when loading in CSV Data so it cannot be blank
 
 
