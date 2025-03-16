@@ -6,7 +6,7 @@
 -Template CSV Data points are not unified
 
 Importer doesnt account for:
-   - if the comment should be private communication or not.
+   - if the comment should be private or public communication or not. All comments are imported in as Private
 
 
 # Syncro Ticket Importer
@@ -54,6 +54,9 @@ Importer doesnt account for:
 
 ## Known Issue List
 
+3.16.25 update
+testing with 500 contacts under one customer looked up worked
+
 3.6.25
 pagination and contact cacheing did not work for a customer with 600 contacts
 
@@ -66,6 +69,9 @@ Cleaned up passing around the "logger" inbetween functions, which is not require
 Cleaned up and unified how they config object is passed inbetween functions. it shou\ld always be the first variable passed in.
 Fixed issue with Intial Issue, not importing on ticket creation with tickets.csv
 Updated template for comments - changed "ticket subject" to "comment subject"
+added _pause variable for rest inbetween API calls in the syncro_read.py file
+updated data validation to better handle lowercase and upper case mismatches
+NOTE: Ticket Status cannot be normalized and Case mismatch will throw a validation error
 
 3.6.25
 Updated Contact Lookup to work correctly * but still having issues with pagination

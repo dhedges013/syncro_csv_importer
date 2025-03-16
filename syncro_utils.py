@@ -117,6 +117,7 @@ def get_customer_id_by_name(customer_name: str, config: Dict[str, Any]):#, logge
 
         # Normalize input for case-insensitive comparison
         normalized_customer_name = customer_name.strip().lower()
+        logger.debug(f"Normalized customer name: passed in as {customer_name} but is now {normalized_customer_name}")
 
         # Search for the customer by name
         for customer in customers:
@@ -313,6 +314,7 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
         logger.error(f"Error reading CSV file {filepath}: {e}")
         raise
 def validate_ticket_data(tickets: List[Dict[str, Any]], temp_data: Dict[str, Any], logger: logging.Logger) -> None:
+
     logger.debug("Validating ticket data...")
 
     # Extract needed lists from temp_data
@@ -326,42 +328,40 @@ def validate_ticket_data(tickets: List[Dict[str, Any]], temp_data: Dict[str, Any
     
     # Build sets of names/values to compare against
     try:
-        tech_names = {t[1] for t in techs}
+        tech_names = {t[1].lower() for t in techs}
     except Exception as e:
         logger.error(f"Error extracting tech names: {e}")
         raise
-    try:        
-        customer_names = {c["business_name"] for c in customers}
+    try:                           
+        customer_names = {c["business_name"].lower() for c in customers}
     except Exception as e:
         logger.error(f"Error extracting customer names: {e}")
         raise
     try:
-        issue_type_names = {i[1] for i in issue_types}
+        issue_type_names = {i.lower() for i in issue_types}
     except Exception as e:
         logger.error(f"Error extracting issue type names: {e}")
         raise
     try:
-        status_names = {s[1] for s in statuses}
+        status_names = {s for s in statuses} #you can not normalize status names
     except Exception as e:
         logger.error(f"Error extracting status names: {e}")
         raise    
     try:
-        contact_names = {c["name"] for c in contacts if c["name"]}
+        contact_names = {c["name"].lower() for c in contacts if c["name"]}
     except Exception as e:
         logger.error(f"Error extracting contact names: {e}")
         raise
-
-
 
     for row_num, ticket in enumerate(tickets, start=1):
         logger.debug(f"Validation for Row {row_num} - Raw ticket data: {ticket}")
 
         # Retrieve each field from the ticket
-        tech_val = ticket["tech"]
-        customer_val = ticket["ticket customer"]
-        issue_type_val = ticket["ticket issue type"]
-        status_val = ticket["ticket status"]
-        contact_val = ticket.get("ticket contact")  # or "contact", if that's the CSV header
+        tech_val = ticket["tech"].strip().lower()
+        customer_val = ticket["ticket customer"].strip().lower()
+        issue_type_val = ticket["ticket issue type"].strip().lower()
+        status_val = ticket["ticket status"] #you can not normalize status names. Must be perfect match
+        contact_val = ticket.get("ticket contact").strip().lower()  # or "contact", if that's the CSV header
 
         logger.debug(f"Validation Row {row_num} - Checking tech='{tech_val}', customer='{customer_val}', "
                      f"issue_type='{issue_type_val}', status='{status_val}', contact='{contact_val}'")
@@ -374,17 +374,21 @@ def validate_ticket_data(tickets: List[Dict[str, Any]], temp_data: Dict[str, Any
             raise ValueError(f"Row {row_num}: Tech '{tech_val}' not found in API cache.")
 
         # Check Customer
+        logger.debug(f"Validation Row {row_num}: Checking customer val '{customer_val}' against {customer_names}")
         if customer_val not in customer_names:
             logger.error(f"Row {row_num}: Customer '{customer_val}' not found in API cache.")
             raise ValueError(f"Row {row_num}: Customer '{customer_val}' not found in API cache.")
 
         # Check Issue Type
-        if issue_type_val not in issue_types:
+        logger.debug(f"Validation Row {row_num}: Checking issue type val '{issue_type_val}' against {issue_type_names}")
+        if issue_type_val not in issue_type_names:
             logger.error(f"Row {row_num}: Issue type '{issue_type_val}' not found in API cache.")
             raise ValueError(f"Row {row_num}: Issue type '{issue_type_val}' not found in API cache.")
 
         # Check Status
-        if status_val not in statuses:
+        logger.debug(f"Validation Row {row_num}: Checking status  val '{status_val}' against {status_names}")
+        if status_val not in status_names:
+            logger.warning("Status names cannot be normalized. Must be perfect match")
             logger.error(f"Row {row_num}: Status '{status_val}' not found in API cache.")
             raise ValueError(f"Row {row_num}: Status '{status_val}' not found in API cache.")
 
@@ -686,7 +690,7 @@ def get_syncro_customer_contact(customerid: str, contact: str):
         
         logger.debug(f"number of contacts found was {len(normalized_filtered_contacts)}")
         logger.debug(f"Contact Lookup: Normalized input contact: {normalized_input_contact}")
-        logger.debug(f"Contact Lookup: Normalized filtered contacts: {normalized_filtered_contacts}")
+        #logger.debug(f"Contact Lookup: Normalized filtered contacts: {normalized_filtered_contacts}") # print all contacts which can be a long list in the log file
 
         # Check for an exact match
         if normalized_input_contact in normalized_filtered_contacts:

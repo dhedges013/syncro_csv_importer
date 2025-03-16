@@ -6,6 +6,7 @@ from syncro_configs import (get_logger)
 
 logger = get_logger(__name__)
 _api_call_count = 0
+_pause = 0.25
 
 def increment_api_call_count():
     """Increment the global API call counter."""
@@ -48,7 +49,7 @@ def syncro_api_call(config, method: str, endpoint: str, data=None, params=None) 
             timeout=30
         )
         # A short sleep to avoid API rate-limits
-        time.sleep(0.38)
+        time.sleep(_pause)
 
         # Raise an error if the response is 4xx or 5xx
         response.raise_for_status()
