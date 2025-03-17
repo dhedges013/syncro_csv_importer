@@ -26,8 +26,8 @@ Importer doesnt account for:
 
 2. **Import Process & Temporary Data**  
    - To speed up the import process, the importer generates a `syncro_temp_data.json` file on the first run of `cli.py`.  
-   - If you add new **Techs, Customers, Contacts, Ticket Issue Types, Statuses, etc.
-   - You are prompted to clear or keep this temp data on each run
+   - If you add new **Techs, Customers, Contacts, Ticket Issue Types, Statuses, etc. you should delete this file and let the program recreate it
+   - You are prompted to update (delete the file to be recreated) or keep this temp data on each run
 
 3. **Logs & File Management**  
    - Log files are stored in the `logs` folder.  
