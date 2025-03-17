@@ -1,6 +1,13 @@
 # syncro_csv_import
  unoffical ticket and comment import tool
 
+# To Run the Import
+- run the cli.py python file
+- see requirements.txt for list of required python modules
+- you should be prompted with questions when running cli.py like select your:
+   - Level of Logging
+   - Syncro Subdomain and API Key
+   - Clearing out the temp_data.json file (if there is one already created)
 
 # To-Do List 3.16.25
 -Template CSV Data points are not unified
