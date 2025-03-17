@@ -10,8 +10,8 @@ TEMP_FILE_PATH = "syncro_temp_data.json"
 COMBINED_TICKETS_COMMENTS_CSV_PATH = "tickets_and_comments_combined.csv"
 
 # Syncro API Configuration
-SYNCRO_SUBDOMAIN = "hedgesmsp"
-SYNCRO_API_KEY = "Te569accf4cb23c55f-285e3e6a36dfdaf1290951ede3262152"
+SYNCRO_SUBDOMAIN = ""
+SYNCRO_API_KEY = ""
 
 SYNCRO_API_BASE_URL = f"https://{SYNCRO_SUBDOMAIN}.syncromsp.com/api/v1"
 
