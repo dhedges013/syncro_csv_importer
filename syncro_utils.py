@@ -885,7 +885,7 @@ def syncro_prepare_ticket_combined_json(config, ticket):
     status = ticket.get("ticket status")
     issue_type = ticket.get("ticket issue type")
     created = ticket.get("ticket created date")
-    contact = ticket.get("ticket user")
+    contact = ticket.get("user") or ticket.get("ticket user")
     priority = ticket.get("ticket priority")
 
     # Process fields
