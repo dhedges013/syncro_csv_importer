@@ -277,6 +277,8 @@ def extract_nested_key(data: dict, key_path: str):
 def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.Logger = None) -> List[Dict[str, Any]]:
     """
     Load data from a CSV file with validation for required fields.
+    Blank values for keys present in ``DEFAULTS`` are filled with their
+    configured defaults instead of raising a validation error.
 
     Args:
         filepath (str): The path to the CSV file.
@@ -313,7 +315,14 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
                 for key, value in row.items():
                     key_lower = key.lower()
                     if value is None or value.strip() == "":
-                        raise ValueError(f"Row {row_number}: Empty value found in field '{key}'.")
+                        default_value = DEFAULTS.get(key_lower)
+                        if default_value is not None:
+                            logger.info(
+                                f"Row {row_number}: Field '{key}' is blank, applying default '{default_value}'."
+                            )
+                            value = default_value
+                        else:
+                            raise ValueError(f"Row {row_number}: Empty value found in field '{key}'.")
                     cleaned_row[key_lower] = value
 
                 if required_fields:
