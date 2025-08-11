@@ -23,13 +23,31 @@ from syncro_read import (
     syncro_get_issue_types,
     syncro_get_all_customers,
     syncro_get_all_contacts,
-    syncro_get_ticket_statuses    
+    syncro_get_ticket_statuses
 )
 
 _temp_data_cache = None  # Global cache for temp data
 
 # Get a logger for this module
 logger = get_logger(__name__)
+
+
+DEFAULT_CONFIG_PATH = "default_config.json"
+
+
+def load_default_config(path: str = DEFAULT_CONFIG_PATH) -> Dict[str, Any]:
+    """Load default value mappings from a JSON configuration file."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning(f"Default config file not found: {path}")
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse default config: {e}")
+    return {}
+
+
+DEFAULTS = load_default_config()
 
 def load_or_fetch_temp_data(config=None) -> dict:
     """
@@ -259,6 +277,8 @@ def extract_nested_key(data: dict, key_path: str):
 def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.Logger = None) -> List[Dict[str, Any]]:
     """
     Load data from a CSV file with validation for required fields.
+    Blank values for keys present in ``DEFAULTS`` are filled with their
+    configured defaults instead of raising a validation error.
 
     Args:
         filepath (str): The path to the CSV file.
@@ -279,10 +299,13 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
         logger.debug(f"Loading data from CSV file: {filepath}")
         with open(filepath, mode="r", encoding="utf-8") as csvfile:
             reader = csv.DictReader(csvfile)
-            headers = reader.fieldnames
+            headers = reader.fieldnames or []
+            headers_lower = [h.lower() for h in headers]
 
             if required_fields:
-                missing_fields = [field for field in required_fields if field not in headers]
+                required_map = {field.lower(): field for field in required_fields}
+                required_lower = list(required_map.keys())
+                missing_fields = [required_map[field_lower] for field_lower in required_lower if field_lower not in headers_lower]
                 if missing_fields:
                     raise ValueError(f"Missing required fields in CSV file: {missing_fields}")
 
@@ -290,14 +313,24 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
             for row_number, row in enumerate(reader, start=1):
                 cleaned_row = {}
                 for key, value in row.items():
+                    key_lower = key.lower()
                     if value is None or value.strip() == "":
-                        raise ValueError(f"Row {row_number}: Empty value found in field '{key}'.")
-                    cleaned_row[key] = value
+                        default_value = DEFAULTS.get(key_lower)
+                        if default_value is not None:
+                            logger.info(
+                                f"Row {row_number}: Field '{key}' is blank, applying default '{default_value}'."
+                            )
+                            value = default_value
+                        else:
+                            raise ValueError(f"Row {row_number}: Empty value found in field '{key}'.")
+                    cleaned_row[key_lower] = value
 
                 if required_fields:
-                    for field in required_fields:
-                        if field not in cleaned_row or cleaned_row[field].strip() == "":
-                            raise ValueError(f"Row {row_number}: Missing or blank required field '{field}'.")
+                    for field_lower in required_lower:
+                        if field_lower not in cleaned_row or cleaned_row[field_lower].strip() == "":
+                            raise ValueError(
+                                f"Row {row_number}: Missing or blank required field '{required_map[field_lower]}'."
+                            )
 
                 data.append(cleaned_row)
 
@@ -593,26 +626,40 @@ def get_syncro_created_date(created: str) -> str:
     try:
         logger.debug(f"Attempting to parse and format date: {created}")
 
-        formats = [
-            "%Y-%m-%d",          # Date only (YYYY-MM-DD)
-            "%m/%d/%Y",          # MM/DD/YYYY
-            "%d-%m-%Y",          # DD-MM-YYYY
-            "%Y-%m-%d %H:%M:%S", # Full datetime (YYYY-MM-DD HH:MM:SS)
-            "%Y/%m/%d %H:%M",    # Datetime without seconds (YYYY/MM/DD HH:MM)
-            "%m/%d/%Y %H:%M",    # MM/DD/YYYY HH:MM (24-hour format)
-            "%m/%d/%Y %I:%M %p", # MM/DD/YYYY HH:MM AM/PM (12-hour format with AM/PM)
-            "%m/%d/%y %H:%M",    # MM/DD/YY HH:MM (2-digit year, 24-hour format) ✅
-            "%m-%d-%y",          # MM-DD-YY
-            "%Y-%m-%dT%H:%M:%S"  # ISO 8601 without timezone
-        ]
-        # Attempt to parse with provided formats
         parsed_date = None
-        for fmt in formats:
+
+        if isinstance(created, datetime):
+            parsed_date = created
+        else:
+            # Try using dateutil's parser first for flexibility
             try:
-                parsed_date = datetime.strptime(created, fmt)
-                break
-            except ValueError:
-                continue
+                parsed_date = parser.parse(created, dayfirst=False)
+                logger.debug(f"Parsed datetime using dateutil: {parsed_date}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"dateutil parser failed: {e}")
+
+        if parsed_date is None:
+            formats = [
+                "%Y-%m-%d",          # Date only (YYYY-MM-DD)
+                "%m/%d/%Y",          # MM/DD/YYYY
+                "%d-%m-%Y",          # DD-MM-YYYY
+                "%Y-%m-%d %H:%M:%S", # Full datetime (YYYY-MM-DD HH:MM:SS)
+                "%Y/%m/%d %H:%M",    # Datetime without seconds (YYYY/MM/DD HH:MM)
+                "%m/%d/%Y %H:%M",    # MM/DD/YYYY HH:MM (24-hour format)
+                "%m/%d/%Y %I:%M %p", # MM/DD/YYYY HH:MM AM/PM (12-hour format with AM/PM)
+                "%m/%d/%y %H:%M",    # MM/DD/YY HH:MM (2-digit year, 24-hour format)
+                "%d/%m/%Y %I:%M %p", # DD/MM/YYYY HH:MM AM/PM
+                "%m-%d-%y",          # MM-DD-YY
+                "%Y-%m-%dT%H:%M:%S"  # ISO 8601 without timezone
+            ]
+
+            for fmt in formats:
+                try:
+                    parsed_date = datetime.strptime(created, fmt)
+                    logger.debug(f"Parsed datetime using format '{fmt}': {parsed_date}")
+                    break
+                except ValueError:
+                    continue
 
         if parsed_date is None:
             raise ValueError(f"Unrecognized date format: {created}")
@@ -777,22 +824,25 @@ def get_syncro_issue_type(issue_type: str):
         issue_types = temp_data.get("issue_types", [])
 
         if not issue_types:
-            logger.warning("No issue types found in Syncro settings. Returning Other")
-            syncro_issue_type = "Other"
-            return syncro_issue_type
+            logger.warning("No issue types found in Syncro settings. Returning default")
+            return DEFAULTS.get("ticket issue type", "Other")
 
         # Normalize the input for case-insensitive comparison
+        if not issue_type:
+            issue_type = DEFAULTS.get("ticket issue type", "Other")
         normalized_issue_type = issue_type.strip().lower()
 
         # Search for a match in the retrieved issue types
         for syncro_issue_type in issue_types:
             if syncro_issue_type.strip().lower() == normalized_issue_type:
-                logger.debug(f"Match found: Input '{issue_type}' matches Syncro issue type '{syncro_issue_type}'.")
+                logger.debug(
+                    f"Match found: Input '{issue_type}' matches Syncro issue type '{syncro_issue_type}'."
+                )
                 return syncro_issue_type
 
-        # Log a warning if no match is found
-        logger.warning(f"No match found for issue type: {issue_type}")
-        return None
+        # Log a warning if no match is found and use default
+        logger.warning(f"No match found for issue type: {issue_type}. Using default")
+        return DEFAULTS.get("ticket issue type", "Other")
 
     except KeyError as e:
         logger.error(f"Key error while accessing issue types: {e}")
@@ -867,11 +917,11 @@ def syncro_prepare_ticket_combined_json(config, ticket):
     ticket_number = ticket.get("ticket number")
     subject = ticket.get("ticket subject")
     #Missing Tech
-    initial_issue = ticket.get("ticket description")
+    initial_issue = ticket.get("ticket description") or DEFAULTS.get("ticket description")
     status = ticket.get("ticket status")
-    issue_type = ticket.get("ticket issue type")
+    issue_type = ticket.get("ticket issue type") or DEFAULTS.get("ticket issue type")
     created = ticket.get("ticket created date")
-    contact = ticket.get("ticket user")
+    contact = ticket.get("user") or ticket.get("ticket user")
     priority = ticket.get("ticket priority")
 
     # Process fields
@@ -982,7 +1032,7 @@ def syncro_prepare_ticket_combined_comment_json(comment):
     comment_created = comment_created.strftime("%m/%d/%y %H:%M")
     customer = comment.get("ticket customer") #need for contact lookup
     ticket_number = comment.get("ticket number") 
-    ticket_comment = comment.get("email body")           
+    ticket_comment = comment.get("email body") or DEFAULTS.get("email body")
     comment_contact = comment.get("user")  
 
     # Process fields    
@@ -1019,9 +1069,9 @@ def syncro_prepare_ticket_json(config,ticket):
     ticket_number = ticket.get("ticket number")
     subject = ticket.get("ticket subject")
     tech = ticket.get("tech")
-    initial_issue = ticket.get("ticket initial issue")
+    initial_issue = ticket.get("ticket initial issue") or DEFAULTS.get("ticket description")
     status = ticket.get("ticket status")
-    issue_type = ticket.get("ticket issue type")
+    issue_type = ticket.get("ticket issue type") or DEFAULTS.get("ticket issue type")
     created = ticket.get("ticket created")
     contact = ticket.get("ticket contact")
     priority = ticket.get("ticket priority")
@@ -1076,7 +1126,7 @@ def syncro_prepare_comments_json(comment):
     # Extract individual fields 
     ticket_number = comment.get("ticket number") 
     comment_subject = comment.get("comment subject")
-    ticket_comment = comment.get("ticket comment") # I tried but it didnt work
+    ticket_comment = comment.get("ticket comment") or DEFAULTS.get("email body")  # I tried but it didnt work
     comment_created =  comment.get("comment created")       
     comment_contact = comment.get("comment contact") # System, Daniel Hedges, Sally Joe
 
@@ -1186,31 +1236,26 @@ def order_ticket_rows_by_date(ticket_rows_data):
     ticket_rows_data = ticket_rows_data.items()
     logger.info(f"Ticket Rows Data after .items() in is a {type(ticket_rows_data)}")
     ordered_ticket_rows_data = {}
-    for row in ticket_rows_data: # each row is one ticket with lots of entries, need to find the oldest entry
-        ordered_entries = [] #this list should hold dict objects of each entry in the ticket
+    for row in ticket_rows_data:  # each row is one ticket with lots of entries, need to find the oldest entry
+        ordered_entries = []  # this list should hold dict objects of each entry in the ticket
         ticket_number, ticket_data = row
         logger.info(f"starting on entries for Ticket Number: {ticket_number}")
-        #logger.info(f"ticket_data: is a {type(ticket_data)}")
 
-        for ticket_entry in ticket_data: # ticket_data is a list of all the entries in the ticket, should be all the entries in a dict object
+        for ticket_entry in ticket_data:  # ticket_data is a list of all the entries in the ticket, should be all the entries in a dict object
             logger.info(f"Ticket Entry: {ticket_entry}")
-            #logger.info(F"Ticket Entry Type: {type(ticket_entry)}")                  
 
-            timestamp = ticket_entry.get("timestamp") # I am getting the timestamp of the ticket entry
-            if "AM" in timestamp or "PM" in timestamp: # Since the time is not in the same format as the other entries, I need to convert it to the same format
-                logger.info(f"Timestamp contains AM or PM: {timestamp}")
-                
-                try:
-                    timestamp = datetime.strptime(timestamp, "%m/%d/%Y %I:%M %p")
-                except ValueError as e:
-                    logger.info(f"ValueError: {e}")
-            else:
-                logger.info(f"Timestamp does not contain AM or PM: {timestamp}")
-                logger.info(f"Converting timestamp to %m%d%Y datetime: {timestamp}") 
-                timestamp = datetime.strptime(timestamp, "%m/%d/%y %H:%M")
-                logger.info(f"Converted timestamp: {timestamp}")
+            timestamp_str = ticket_entry.get("timestamp")  # I am getting the timestamp of the ticket entry
+            if not timestamp_str:
+                logger.warning("Missing timestamp for ticket %s entry, skipping", ticket_number)
+                continue
 
-            ordered_entries.append((timestamp, ticket_entry)) # I am appending the timestamp and the ticket entry to the ordered_entries list
+            try:
+                timestamp = parser.parse(timestamp_str)
+            except (ValueError, TypeError) as e:
+                logger.error(f"Failed to parse timestamp '{timestamp_str}': {e}")
+                continue
+
+            ordered_entries.append((timestamp, ticket_entry))  # I am appending the timestamp and the ticket entry to the ordered_entries list
 
         ordered_entries.sort(key=lambda x: x[0])
         logger.info(f"ordered_entries type: {type(ordered_entries)}")  
