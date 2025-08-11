@@ -23,13 +23,31 @@ from syncro_read import (
     syncro_get_issue_types,
     syncro_get_all_customers,
     syncro_get_all_contacts,
-    syncro_get_ticket_statuses    
+    syncro_get_ticket_statuses
 )
 
 _temp_data_cache = None  # Global cache for temp data
 
 # Get a logger for this module
 logger = get_logger(__name__)
+
+
+DEFAULT_CONFIG_PATH = "default_config.json"
+
+
+def load_default_config(path: str = DEFAULT_CONFIG_PATH) -> Dict[str, Any]:
+    """Load default value mappings from a JSON configuration file."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning(f"Default config file not found: {path}")
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse default config: {e}")
+    return {}
+
+
+DEFAULTS = load_default_config()
 
 def load_or_fetch_temp_data(config=None) -> dict:
     """
@@ -797,22 +815,25 @@ def get_syncro_issue_type(issue_type: str):
         issue_types = temp_data.get("issue_types", [])
 
         if not issue_types:
-            logger.warning("No issue types found in Syncro settings. Returning Other")
-            syncro_issue_type = "Other"
-            return syncro_issue_type
+            logger.warning("No issue types found in Syncro settings. Returning default")
+            return DEFAULTS.get("ticket issue type", "Other")
 
         # Normalize the input for case-insensitive comparison
+        if not issue_type:
+            issue_type = DEFAULTS.get("ticket issue type", "Other")
         normalized_issue_type = issue_type.strip().lower()
 
         # Search for a match in the retrieved issue types
         for syncro_issue_type in issue_types:
             if syncro_issue_type.strip().lower() == normalized_issue_type:
-                logger.debug(f"Match found: Input '{issue_type}' matches Syncro issue type '{syncro_issue_type}'.")
+                logger.debug(
+                    f"Match found: Input '{issue_type}' matches Syncro issue type '{syncro_issue_type}'."
+                )
                 return syncro_issue_type
 
-        # Log a warning if no match is found
-        logger.warning(f"No match found for issue type: {issue_type}")
-        return None
+        # Log a warning if no match is found and use default
+        logger.warning(f"No match found for issue type: {issue_type}. Using default")
+        return DEFAULTS.get("ticket issue type", "Other")
 
     except KeyError as e:
         logger.error(f"Key error while accessing issue types: {e}")
@@ -887,9 +908,9 @@ def syncro_prepare_ticket_combined_json(config, ticket):
     ticket_number = ticket.get("ticket number")
     subject = ticket.get("ticket subject")
     #Missing Tech
-    initial_issue = ticket.get("ticket description")
+    initial_issue = ticket.get("ticket description") or DEFAULTS.get("ticket description")
     status = ticket.get("ticket status")
-    issue_type = ticket.get("ticket issue type")
+    issue_type = ticket.get("ticket issue type") or DEFAULTS.get("ticket issue type")
     created = ticket.get("ticket created date")
     contact = ticket.get("user") or ticket.get("ticket user")
     priority = ticket.get("ticket priority")
@@ -1002,7 +1023,7 @@ def syncro_prepare_ticket_combined_comment_json(comment):
     comment_created = comment_created.strftime("%m/%d/%y %H:%M")
     customer = comment.get("ticket customer") #need for contact lookup
     ticket_number = comment.get("ticket number") 
-    ticket_comment = comment.get("email body")           
+    ticket_comment = comment.get("email body") or DEFAULTS.get("email body")
     comment_contact = comment.get("user")  
 
     # Process fields    
@@ -1039,9 +1060,9 @@ def syncro_prepare_ticket_json(config,ticket):
     ticket_number = ticket.get("ticket number")
     subject = ticket.get("ticket subject")
     tech = ticket.get("tech")
-    initial_issue = ticket.get("ticket initial issue")
+    initial_issue = ticket.get("ticket initial issue") or DEFAULTS.get("ticket description")
     status = ticket.get("ticket status")
-    issue_type = ticket.get("ticket issue type")
+    issue_type = ticket.get("ticket issue type") or DEFAULTS.get("ticket issue type")
     created = ticket.get("ticket created")
     contact = ticket.get("ticket contact")
     priority = ticket.get("ticket priority")
@@ -1096,7 +1117,7 @@ def syncro_prepare_comments_json(comment):
     # Extract individual fields 
     ticket_number = comment.get("ticket number") 
     comment_subject = comment.get("comment subject")
-    ticket_comment = comment.get("ticket comment") # I tried but it didnt work
+    ticket_comment = comment.get("ticket comment") or DEFAULTS.get("email body")  # I tried but it didnt work
     comment_created =  comment.get("comment created")       
     comment_contact = comment.get("comment contact") # System, Daniel Hedges, Sally Joe
 
