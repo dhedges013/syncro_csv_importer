@@ -593,26 +593,40 @@ def get_syncro_created_date(created: str) -> str:
     try:
         logger.debug(f"Attempting to parse and format date: {created}")
 
-        formats = [
-            "%Y-%m-%d",          # Date only (YYYY-MM-DD)
-            "%m/%d/%Y",          # MM/DD/YYYY
-            "%d-%m-%Y",          # DD-MM-YYYY
-            "%Y-%m-%d %H:%M:%S", # Full datetime (YYYY-MM-DD HH:MM:SS)
-            "%Y/%m/%d %H:%M",    # Datetime without seconds (YYYY/MM/DD HH:MM)
-            "%m/%d/%Y %H:%M",    # MM/DD/YYYY HH:MM (24-hour format)
-            "%m/%d/%Y %I:%M %p", # MM/DD/YYYY HH:MM AM/PM (12-hour format with AM/PM)
-            "%m/%d/%y %H:%M",    # MM/DD/YY HH:MM (2-digit year, 24-hour format) ✅
-            "%m-%d-%y",          # MM-DD-YY
-            "%Y-%m-%dT%H:%M:%S"  # ISO 8601 without timezone
-        ]
-        # Attempt to parse with provided formats
         parsed_date = None
-        for fmt in formats:
+
+        if isinstance(created, datetime):
+            parsed_date = created
+        else:
+            # Try using dateutil's parser first for flexibility
             try:
-                parsed_date = datetime.strptime(created, fmt)
-                break
-            except ValueError:
-                continue
+                parsed_date = parser.parse(created, dayfirst=False)
+                logger.debug(f"Parsed datetime using dateutil: {parsed_date}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"dateutil parser failed: {e}")
+
+        if parsed_date is None:
+            formats = [
+                "%Y-%m-%d",          # Date only (YYYY-MM-DD)
+                "%m/%d/%Y",          # MM/DD/YYYY
+                "%d-%m-%Y",          # DD-MM-YYYY
+                "%Y-%m-%d %H:%M:%S", # Full datetime (YYYY-MM-DD HH:MM:SS)
+                "%Y/%m/%d %H:%M",    # Datetime without seconds (YYYY/MM/DD HH:MM)
+                "%m/%d/%Y %H:%M",    # MM/DD/YYYY HH:MM (24-hour format)
+                "%m/%d/%Y %I:%M %p", # MM/DD/YYYY HH:MM AM/PM (12-hour format with AM/PM)
+                "%m/%d/%y %H:%M",    # MM/DD/YY HH:MM (2-digit year, 24-hour format)
+                "%d/%m/%Y %I:%M %p", # DD/MM/YYYY HH:MM AM/PM
+                "%m-%d-%y",          # MM-DD-YY
+                "%Y-%m-%dT%H:%M:%S"  # ISO 8601 without timezone
+            ]
+
+            for fmt in formats:
+                try:
+                    parsed_date = datetime.strptime(created, fmt)
+                    logger.debug(f"Parsed datetime using format '{fmt}': {parsed_date}")
+                    break
+                except ValueError:
+                    continue
 
         if parsed_date is None:
             raise ValueError(f"Unrecognized date format: {created}")
