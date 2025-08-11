@@ -279,10 +279,13 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
         logger.debug(f"Loading data from CSV file: {filepath}")
         with open(filepath, mode="r", encoding="utf-8") as csvfile:
             reader = csv.DictReader(csvfile)
-            headers = reader.fieldnames
+            headers = reader.fieldnames or []
+            headers_lower = [h.lower() for h in headers]
 
             if required_fields:
-                missing_fields = [field for field in required_fields if field not in headers]
+                required_map = {field.lower(): field for field in required_fields}
+                required_lower = list(required_map.keys())
+                missing_fields = [required_map[field_lower] for field_lower in required_lower if field_lower not in headers_lower]
                 if missing_fields:
                     raise ValueError(f"Missing required fields in CSV file: {missing_fields}")
 
@@ -290,14 +293,17 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
             for row_number, row in enumerate(reader, start=1):
                 cleaned_row = {}
                 for key, value in row.items():
+                    key_lower = key.lower()
                     if value is None or value.strip() == "":
                         raise ValueError(f"Row {row_number}: Empty value found in field '{key}'.")
-                    cleaned_row[key] = value
+                    cleaned_row[key_lower] = value
 
                 if required_fields:
-                    for field in required_fields:
-                        if field not in cleaned_row or cleaned_row[field].strip() == "":
-                            raise ValueError(f"Row {row_number}: Missing or blank required field '{field}'.")
+                    for field_lower in required_lower:
+                        if field_lower not in cleaned_row or cleaned_row[field_lower].strip() == "":
+                            raise ValueError(
+                                f"Row {row_number}: Missing or blank required field '{required_map[field_lower]}'."
+                            )
 
                 data.append(cleaned_row)
 
