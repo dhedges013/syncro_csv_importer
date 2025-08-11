@@ -1186,31 +1186,26 @@ def order_ticket_rows_by_date(ticket_rows_data):
     ticket_rows_data = ticket_rows_data.items()
     logger.info(f"Ticket Rows Data after .items() in is a {type(ticket_rows_data)}")
     ordered_ticket_rows_data = {}
-    for row in ticket_rows_data: # each row is one ticket with lots of entries, need to find the oldest entry
-        ordered_entries = [] #this list should hold dict objects of each entry in the ticket
+    for row in ticket_rows_data:  # each row is one ticket with lots of entries, need to find the oldest entry
+        ordered_entries = []  # this list should hold dict objects of each entry in the ticket
         ticket_number, ticket_data = row
         logger.info(f"starting on entries for Ticket Number: {ticket_number}")
-        #logger.info(f"ticket_data: is a {type(ticket_data)}")
 
-        for ticket_entry in ticket_data: # ticket_data is a list of all the entries in the ticket, should be all the entries in a dict object
+        for ticket_entry in ticket_data:  # ticket_data is a list of all the entries in the ticket, should be all the entries in a dict object
             logger.info(f"Ticket Entry: {ticket_entry}")
-            #logger.info(F"Ticket Entry Type: {type(ticket_entry)}")                  
 
-            timestamp = ticket_entry.get("timestamp") # I am getting the timestamp of the ticket entry
-            if "AM" in timestamp or "PM" in timestamp: # Since the time is not in the same format as the other entries, I need to convert it to the same format
-                logger.info(f"Timestamp contains AM or PM: {timestamp}")
-                
-                try:
-                    timestamp = datetime.strptime(timestamp, "%m/%d/%Y %I:%M %p")
-                except ValueError as e:
-                    logger.info(f"ValueError: {e}")
-            else:
-                logger.info(f"Timestamp does not contain AM or PM: {timestamp}")
-                logger.info(f"Converting timestamp to %m%d%Y datetime: {timestamp}") 
-                timestamp = datetime.strptime(timestamp, "%m/%d/%y %H:%M")
-                logger.info(f"Converted timestamp: {timestamp}")
+            timestamp_str = ticket_entry.get("timestamp")  # I am getting the timestamp of the ticket entry
+            if not timestamp_str:
+                logger.warning("Missing timestamp for ticket %s entry, skipping", ticket_number)
+                continue
 
-            ordered_entries.append((timestamp, ticket_entry)) # I am appending the timestamp and the ticket entry to the ordered_entries list
+            try:
+                timestamp = parser.parse(timestamp_str)
+            except (ValueError, TypeError) as e:
+                logger.error(f"Failed to parse timestamp '{timestamp_str}': {e}")
+                continue
+
+            ordered_entries.append((timestamp, ticket_entry))  # I am appending the timestamp and the ticket entry to the ordered_entries list
 
         ordered_entries.sort(key=lambda x: x[0])
         logger.info(f"ordered_entries type: {type(ordered_entries)}")  
