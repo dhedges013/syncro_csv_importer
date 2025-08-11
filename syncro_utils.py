@@ -4,7 +4,7 @@ from datetime import datetime
 from dateutil import parser
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import csv
 import pytz
 from collections import defaultdict
@@ -526,7 +526,7 @@ def get_syncro_tech(tech_name: str):
         logger.error(f"An unexpected error occurred in get_syncro_tech: {e}")
         return None
 
-def build_syncro_initial_issue(initial_issue: str, syncroContact: str) -> list:
+def build_syncro_initial_issue(initial_issue: str, syncroContact: str, created_at: Optional[str] = None) -> list:
     """
     Build the JSON object for the initial issue in Syncro.
 
@@ -552,16 +552,17 @@ def build_syncro_initial_issue(initial_issue: str, syncroContact: str) -> list:
 
         # Build the JSON structure as a list of comments
         initial_issue_comments = []
-        comment = {                
+        comment = {
                 "subject": "CSV Import",
                 "body": initial_issue,
                 "hidden": True,
                 "do_not_email": True,
                 "tech": syncroContact  }
-              
-            
-        
-        initial_issue_comments.append(comment)        
+
+        if created_at:
+            comment["created_at"] = created_at
+
+        initial_issue_comments.append(comment)
         # Log the built JSON
         logger.info(f"Successfully built initial issue comments: {initial_issue_comments}")
         return initial_issue_comments
@@ -839,7 +840,7 @@ def syncro_get_all_comments_from_csv() -> List[Dict[str, Any]]:
         logger.error(f"An unexpected error occurred while loading comments: {e}")
         raise
 
-def syncro_prepare_ticket_combined_json(ticket):
+def syncro_prepare_ticket_combined_json(config, ticket):
     """ 
     Used with the tickets_and_comments_combined.csv template
 
@@ -874,12 +875,12 @@ def syncro_prepare_ticket_combined_json(ticket):
     priority = ticket.get("ticket priority")
 
     # Process fields
-    customer_id = get_customer_id_by_name(customer)
+    customer_id = get_customer_id_by_name(customer, config)
     syncro_ticket_number = clean_syncro_ticket_number(ticket_number) 
     #Missing processing Tech data   
-    syncro_created_date = parse_comment_created(created)
+    syncro_created_date = get_syncro_created_date(created)
     syncro_contact = get_syncro_customer_contact(customer_id, contact)
-    initial_issue_comments = build_syncro_initial_issue(initial_issue, contact)
+    initial_issue_comments = build_syncro_initial_issue(initial_issue, contact, syncro_created_date)
     syncro_issue_type = get_syncro_issue_type(issue_type)
     syncro_priority = get_syncro_priority(priority)
 

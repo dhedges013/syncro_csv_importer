@@ -4,6 +4,7 @@ from syncro_config_object import SyncroConfig
 from syncro_configs import setup_logging, get_logger, TEMP_FILE_PATH, SYNCRO_API_KEY, SYNCRO_SUBDOMAIN
 from main_tickets import run_tickets
 from main_comments import run_comments
+from main_tickets_comments_combined import run_tickets_comments_combined
 import logging
 
 logger = get_logger(__name__)
@@ -85,14 +86,17 @@ def main_menu():
     print("Choose your importer:")
     print("1. Tickets")
     print("2. Comments")
-    choice = input("Enter 1 or 2: ").strip()
+    print("3. Tickets and Comments Combined")
+    choice = input("Enter 1, 2 or 3: ").strip()
 
     if choice == "1":
         run_tickets(config)
     elif choice == "2":
         run_comments(config)
+    elif choice == "3":
+        run_tickets_comments_combined(config)
     else:
-        print("Invalid selection. Please enter 1 or 2.")
+        print("Invalid selection. Please enter 1, 2 or 3.")
 
 
 if __name__ == "__main__":
