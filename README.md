@@ -20,9 +20,11 @@ Importer doesnt account for:
 
 ## Setup Instructions
 
-1. **Configure Syncro API Access**  
+1. **Configure Syncro API Access**
    - Add your **Syncro Subdomain** and **API Key** in the `syncro_configs` file.
    - Adjust your Timezone if needed as well
+   - Choose your preferred timestamp format (`US` for MM/DD/YY or `INTL` for DD/MM/YY)
+   - The importer recognizes many date/time styles (e.g. `1-2-2025`, `15-2-04`, `05/04/25 5:04 PM`)
 
 2. **Import Process & Temporary Data**  
    - To speed up the import process, the importer generates a `syncro_temp_data.json` file on the first run of `cli.py`.  
