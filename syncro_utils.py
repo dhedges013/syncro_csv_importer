@@ -15,7 +15,9 @@ from syncro_configs import (
     SYNCRO_TIMEZONE,
     TICKETS_CSV_PATH,
     COMMENTS_CSV_PATH,
-    COMBINED_TICKETS_COMMENTS_CSV_PATH
+    COMBINED_TICKETS_COMMENTS_CSV_PATH,
+    is_day_first,
+    get_timestamp_format,
 )
 
 from syncro_read import (
@@ -633,30 +635,61 @@ def get_syncro_created_date(created: str) -> str:
         else:
             # Try using dateutil's parser first for flexibility
             try:
-                parsed_date = parser.parse(created, dayfirst=False)
-                logger.debug(f"Parsed datetime using dateutil: {parsed_date}")
+                parsed_date = parser.parse(
+                    created,
+                    dayfirst=is_day_first(),
+                    fuzzy=True,
+                )
+                logger.debug(
+                    "Parsed datetime using dateutil with dayfirst=%s: %s",
+                    is_day_first(),
+                    parsed_date,
+                )
             except (ValueError, TypeError) as e:
                 logger.warning(f"dateutil parser failed: {e}")
 
         if parsed_date is None:
+            separators = ["/", "-", "."]
             formats = [
-                "%Y-%m-%d",          # Date only (YYYY-MM-DD)
-                "%m/%d/%Y",          # MM/DD/YYYY
-                "%d-%m-%Y",          # DD-MM-YYYY
-                "%Y-%m-%d %H:%M:%S", # Full datetime (YYYY-MM-DD HH:MM:SS)
-                "%Y/%m/%d %H:%M",    # Datetime without seconds (YYYY/MM/DD HH:MM)
-                "%m/%d/%Y %H:%M",    # MM/DD/YYYY HH:MM (24-hour format)
-                "%m/%d/%Y %I:%M %p", # MM/DD/YYYY HH:MM AM/PM (12-hour format with AM/PM)
-                "%m/%d/%y %H:%M",    # MM/DD/YY HH:MM (2-digit year, 24-hour format)
-                "%d/%m/%Y %I:%M %p", # DD/MM/YYYY HH:MM AM/PM
-                "%m-%d-%y",          # MM-DD-YY
-                "%Y-%m-%dT%H:%M:%S"  # ISO 8601 without timezone
+                "%Y-%m-%d",
+                "%Y-%m-%d %H:%M:%S",
+                "%Y-%m-%d %H:%M",
+                "%Y/%m/%d",
+                "%Y/%m/%d %H:%M",
+                "%Y-%m-%dT%H:%M:%S",
             ]
+
+            if is_day_first():
+                base_patterns = [
+                    "%d{sep}%m{sep}%Y %H:%M:%S",
+                    "%d{sep}%m{sep}%Y %H:%M",
+                    "%d{sep}%m{sep}%Y %I:%M %p",
+                    "%d{sep}%m{sep}%y %H:%M:%S",
+                    "%d{sep}%m{sep}%y %H:%M",
+                    "%d{sep}%m{sep}%y %I:%M %p",
+                    "%d{sep}%m{sep}%Y",
+                    "%d{sep}%m{sep}%y",
+                ]
+            else:
+                base_patterns = [
+                    "%m{sep}%d{sep}%Y %H:%M:%S",
+                    "%m{sep}%d{sep}%Y %H:%M",
+                    "%m{sep}%d{sep}%Y %I:%M %p",
+                    "%m{sep}%d{sep}%y %H:%M:%S",
+                    "%m{sep}%d{sep}%y %H:%M",
+                    "%m{sep}%d{sep}%y %I:%M %p",
+                    "%m{sep}%d{sep}%Y",
+                    "%m{sep}%d{sep}%y",
+                ]
+
+            for sep in separators:
+                for pattern in base_patterns:
+                    formats.append(pattern.format(sep=sep))
 
             for fmt in formats:
                 try:
                     parsed_date = datetime.strptime(created, fmt)
-                    logger.debug(f"Parsed datetime using format '{fmt}': {parsed_date}")
+                    logger.debug("Parsed datetime using format '%s': %s", fmt, parsed_date)
                     break
                 except ValueError:
                     continue
@@ -952,55 +985,88 @@ def syncro_prepare_ticket_combined_json(config, ticket):
     ticket_json = {key: value for key, value in ticket_json.items() if value is not None}
 
     return ticket_json
-def parse_comment_created(comment_created):
-    """
-    Parses the comment timestamp to ensure it is correctly formatted.
+def parse_comment_created(comment_created: Any) -> Optional[datetime]:
+    """Parse a timestamp string into a ``datetime``.
 
-    - Uses `dateutil.parser.parse` to automatically handle most formats.
-    - If `dateutil.parser` fails, falls back to explicit parsing.
-    - Handles both MM/DD/YYYY and DD/MM/YYYY by attempting logical swaps.
+    Attempts to interpret a wide variety of common date and time formats,
+    respecting the configured ``TIMESTAMP_FORMAT`` for day-first or
+    month-first parsing.  Examples of supported inputs include ``1-2-2025``,
+    ``15-2-04``, ``05/04/25 5:04 PM`` and other similar variations.
+
+    Args:
+        comment_created: A string or ``datetime`` representing the timestamp.
+
+    Returns:
+        ``datetime`` if parsing succeeds, otherwise ``None``.
     """
 
     if isinstance(comment_created, datetime):
-        logger.info(f"comment_created is already a datetime object: {comment_created}")
-        return comment_created  # Return as is
-    try:
-        # Try using dateutil's parser for automatic parsing
-        parsed_date = parser.parse(comment_created, dayfirst=False)
-        logger.info(f"Parsed datetime using dateutil: {parsed_date}")
-        return parsed_date
+        logger.info("comment_created is already a datetime object: %s", comment_created)
+        return comment_created
 
+    if not comment_created:
+        logger.error("No timestamp provided")
+        return None
+
+    try:
+        parsed_date = parser.parse(
+            comment_created,
+            dayfirst=is_day_first(),
+            fuzzy=True,
+        )
+        logger.info(
+            "Parsed datetime using dateutil with dayfirst=%s: %s",
+            is_day_first(),
+            parsed_date,
+        )
+        return parsed_date
     except (ValueError, TypeError) as e:
-        logger.warning(f"dateutil parser failed: {e}")
+        logger.warning("dateutil parser failed: %s", e)
 
     # Explicit format handling as fallback
-    possible_formats = [
-        "%m/%d/%Y %I:%M %p",  # MM/DD/YYYY 12-hour
-        "%m/%d/%Y %H:%M",     # MM/DD/YYYY 24-hour
-        "%m/%d/%y %H:%M",     # MM/DD/YY 24-hour
-        "%d/%m/%Y %H:%M",     # DD/MM/YYYY 24-hour
-        "%d/%m/%y %H:%M",     # DD/MM/YY 24-hour
-        "%Y-%m-%d %H:%M:%S",  # ISO format
+    separators = ["/", "-", "."]
+    possible_formats: List[str] = [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d",
     ]
+
+    if is_day_first():
+        base_patterns = [
+            "%d{sep}%m{sep}%Y %H:%M:%S",
+            "%d{sep}%m{sep}%Y %H:%M",
+            "%d{sep}%m{sep}%Y %I:%M %p",
+            "%d{sep}%m{sep}%y %H:%M:%S",
+            "%d{sep}%m{sep}%y %H:%M",
+            "%d{sep}%m{sep}%y %I:%M %p",
+            "%d{sep}%m{sep}%Y",
+            "%d{sep}%m{sep}%y",
+        ]
+    else:
+        base_patterns = [
+            "%m{sep}%d{sep}%Y %H:%M:%S",
+            "%m{sep}%d{sep}%Y %H:%M",
+            "%m{sep}%d{sep}%Y %I:%M %p",
+            "%m{sep}%d{sep}%y %H:%M:%S",
+            "%m{sep}%d{sep}%y %H:%M",
+            "%m{sep}%d{sep}%y %I:%M %p",
+            "%m{sep}%d{sep}%Y",
+            "%m{sep}%d{sep}%y",
+        ]
+
+    for sep in separators:
+        for pattern in base_patterns:
+            possible_formats.append(pattern.format(sep=sep))
 
     for fmt in possible_formats:
         try:
             parsed_date = datetime.strptime(comment_created, fmt)
-            logger.info(f"Parsed datetime using format '{fmt}': {parsed_date}")
+            logger.info("Parsed datetime using format '%s': %s", fmt, parsed_date)
             return parsed_date
         except ValueError:
             continue
 
-    # Last attempt: flip month and day if format is ambiguous
-    try:
-        temp_date = datetime.strptime(comment_created, "%m/%d/%y %H:%M")
-        flipped_date = datetime(temp_date.year, temp_date.day, temp_date.month, temp_date.hour, temp_date.minute)
-        logger.info(f"Converted timestamp (flipped month/day): {flipped_date}")
-        return flipped_date
-    except ValueError as e:
-        logger.error(f"Final attempt failed: {e}")
-
-    logger.error(f"Unrecognized date format: {comment_created}")
+    logger.error("Unrecognized date format: %s", comment_created)
     return None
 
 def syncro_prepare_ticket_combined_comment_json(comment):
@@ -1027,16 +1093,18 @@ def syncro_prepare_ticket_combined_comment_json(comment):
     ]
     """ 
     #pull out individual fields and process them for creating a Syncro comment
-    comment_created =  comment.get("timestamp") 
-    comment_created = parse_comment_created(comment_created)
-    comment_created = comment_created.strftime("%m/%d/%y %H:%M")
+    comment_created_raw = comment.get("timestamp")
+    parsed_created = parse_comment_created(comment_created_raw)
+    if parsed_created:
+        comment_created = parsed_created.strftime(get_timestamp_format())
+        syncro_created_date = get_syncro_created_date(comment_created)
+    else:
+        logger.error(f"Invalid timestamp for comment: {comment_created_raw}")
+        syncro_created_date = None
     customer = comment.get("ticket customer") #need for contact lookup
-    ticket_number = comment.get("ticket number") 
+    ticket_number = comment.get("ticket number")
     ticket_comment = comment.get("email body") or DEFAULTS.get("email body")
-    comment_contact = comment.get("user")  
-
-    # Process fields    
-    syncro_created_date = get_syncro_created_date(comment_created)
+    comment_contact = comment.get("user")
 
     # Create JSON payload for a Syncro comment
     comment_json = {
@@ -1127,11 +1195,14 @@ def syncro_prepare_comments_json(comment):
     ticket_number = comment.get("ticket number") 
     comment_subject = comment.get("comment subject")
     ticket_comment = comment.get("ticket comment") or DEFAULTS.get("email body")  # I tried but it didnt work
-    comment_created =  comment.get("comment created")       
+    comment_created_raw = comment.get("comment created")
     comment_contact = comment.get("comment contact") # System, Daniel Hedges, Sally Joe
 
     # Process fields
-    syncro_created_date = parse_comment_created(comment_created)
+    syncro_created_date = parse_comment_created(comment_created_raw)
+    if not syncro_created_date:
+        logger.error(f"Invalid comment created date: {comment_created_raw}")
+        return None
 
     # Create JSON payload
     comment_json = {
@@ -1249,10 +1320,9 @@ def order_ticket_rows_by_date(ticket_rows_data):
                 logger.warning("Missing timestamp for ticket %s entry, skipping", ticket_number)
                 continue
 
-            try:
-                timestamp = parser.parse(timestamp_str)
-            except (ValueError, TypeError) as e:
-                logger.error(f"Failed to parse timestamp '{timestamp_str}': {e}")
+            timestamp = parse_comment_created(timestamp_str)
+            if timestamp is None:
+                logger.error("Failed to parse timestamp '%s'", timestamp_str)
                 continue
 
             ordered_entries.append((timestamp, ticket_entry))  # I am appending the timestamp and the ticket entry to the ordered_entries list
