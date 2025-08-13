@@ -1,4 +1,5 @@
-from syncro_utils import  syncro_get_all_comments_from_csv, syncro_prepare_comments_json
+from csv_utils import syncro_get_all_comments_from_csv
+from syncro_utils import syncro_prepare_comments_json
 from syncro_write import syncro_create_comment
 from syncro_read import get_api_call_count
 from syncro_configs import get_logger
