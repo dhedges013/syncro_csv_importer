@@ -7,6 +7,7 @@ import logging
 from typing import Any, Dict, List, Optional
 import pytz
 from collections import defaultdict
+from importlib import import_module
 
 from syncro_configs import (
     get_logger,
@@ -50,14 +51,25 @@ def load_default_config(path: str = DEFAULT_CONFIG_PATH) -> Dict[str, Any]:
 
 DEFAULTS = load_default_config()
 
-from csv_utils import (
-    extract_nested_key,
-    load_csv,
-    validate_ticket_data,
-    syncro_get_all_tickets_from_csv,
-    syncro_get_all_comments_from_csv,
-    syncro_get_all_tickets_and_comments_from_combined_csv,
-)
+
+_CSV_UTILS_NAMES = {
+    "extract_nested_key",
+    "load_csv",
+    "validate_ticket_data",
+    "syncro_get_all_tickets_from_csv",
+    "syncro_get_all_comments_from_csv",
+    "syncro_get_all_tickets_and_comments_from_combined_csv",
+}
+
+
+def __getattr__(name: str):
+    """Lazily import CSV helpers to avoid circular dependencies."""
+    if name in _CSV_UTILS_NAMES:
+        module = import_module("csv_utils")
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__} has no attribute {name}")
+
+
 
 def load_or_fetch_temp_data(config=None) -> dict:
     """
@@ -1011,18 +1023,33 @@ def group_comments_by_ticket_number(comments):
     
     return dict(grouped_comments)
 
+
+
+def order_ticket_rows_by_date(tickets: Dict[str, List[dict]]):
+    """Order grouped ticket entries by their timestamp.
+
+    Args:
+        tickets: Mapping of ticket number to a list of row dictionaries
+            containing a ``timestamp`` field.
+
+    Returns:
+        Dict where each ticket number maps to a list of tuples of
+        ``(timestamp, row_dict)`` sorted chronologically.
+    """
+
+    ordered: Dict[str, List[tuple]] = {}
+    for ticket_number, rows in tickets.items():
+        def _parse(row: Dict[str, Any]):
+            return parse_comment_created(row.get("timestamp")) or datetime.min
+
+        sorted_rows = sorted(rows, key=_parse)
+        ordered[ticket_number] = [(_parse(r), r) for r in sorted_rows]
+
+    return ordered
+
+
 def syncro_prepare_row_json(row):
     pass
 
 
-if __name__ == "__main__":
-    
-    comment_created = "6/12/2024 15:00"
-    date = parse_comment_created(comment_created)
-    print(date)
-    
-    tickets = syncro_get_all_tickets_and_comments_from_combined_csv()    
-    tickets_in_order = order_ticket_rows_by_date(tickets)
-    logger.info(f"Tickets in order type: {type(tickets_in_order)}")
-    for key, value in tickets_in_order.items():
-        logger.info(f"Key: {key}, Value Type: {type(value)}")
+
