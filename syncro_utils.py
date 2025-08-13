@@ -5,9 +5,9 @@ from dateutil import parser
 import json
 import logging
 from typing import Any, Dict, List, Optional
-import csv
 import pytz
 from collections import defaultdict
+from importlib import import_module
 
 from syncro_configs import (
     get_logger,
@@ -50,6 +50,24 @@ def load_default_config(path: str = DEFAULT_CONFIG_PATH) -> Dict[str, Any]:
 
 
 DEFAULTS = load_default_config()
+
+_CSV_UTILS_NAMES = {
+    "extract_nested_key",
+    "load_csv",
+    "validate_ticket_data",
+    "syncro_get_all_tickets_from_csv",
+    "syncro_get_all_comments_from_csv",
+    "syncro_get_all_tickets_and_comments_from_combined_csv",
+}
+
+
+def __getattr__(name: str):
+    """Lazily import CSV helpers to avoid circular dependencies."""
+    if name in _CSV_UTILS_NAMES:
+        module = import_module("csv_utils")
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__} has no attribute {name}")
+
 
 def load_or_fetch_temp_data(config=None) -> dict:
     """
@@ -256,223 +274,6 @@ def check_duplicate_contact(contact_name: str, logger: logging.Logger) -> bool:
     except Exception as e:
         logger.error(f"An unexpected error occurred in check_duplicate_contact: {e}")
         return False
-
-def extract_nested_key(data: dict, key_path: str):
-    """
-    Extract a nested key from a dictionary using dot notation.
-
-    Args:
-        data (dict): Dictionary to search.
-        key_path (str): Dot-separated path to the key.
-
-    Returns:
-        Any: Value of the nested key if it exists, otherwise None.
-    """
-    keys = key_path.split('.')
-    for key in keys:
-        if isinstance(data, dict) and key in data:
-            data = data[key]
-        else:
-            return None
-    return data
-
-def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.Logger = None) -> List[Dict[str, Any]]:
-    """
-    Load data from a CSV file with validation for required fields.
-    Blank values for keys present in ``DEFAULTS`` are filled with their
-    configured defaults instead of raising a validation error.
-
-    Args:
-        filepath (str): The path to the CSV file.
-        required_fields (List[str]): List of required field names to validate.
-        logger (logging.Logger, optional): Logger instance for logging.
-
-    Returns:
-        List[Dict[str, Any]]: A list of dictionaries, where each dictionary represents a row in the CSV file.
-
-    Raises:
-        FileNotFoundError: If the file is not found.
-        ValueError: If required fields are missing or if any row data is blank.
-    """
-    if logger is None:
-        logger = logging.getLogger("syncro")
-
-    try:
-        logger.debug(f"Loading data from CSV file: {filepath}")
-        with open(filepath, mode="r", encoding="utf-8") as csvfile:
-            reader = csv.DictReader(csvfile)
-            headers = reader.fieldnames or []
-            headers_lower = [h.lower() for h in headers]
-
-            if required_fields:
-                required_map = {field.lower(): field for field in required_fields}
-                required_lower = list(required_map.keys())
-                missing_fields = [required_map[field_lower] for field_lower in required_lower if field_lower not in headers_lower]
-                if missing_fields:
-                    raise ValueError(f"Missing required fields in CSV file: {missing_fields}")
-
-            data = []
-            for row_number, row in enumerate(reader, start=1):
-                cleaned_row = {}
-                for key, value in row.items():
-                    key_lower = key.lower()
-                    if value is None or value.strip() == "":
-                        default_value = DEFAULTS.get(key_lower)
-                        if default_value is not None:
-                            logger.info(
-                                f"Row {row_number}: Field '{key}' is blank, applying default '{default_value}'."
-                            )
-                            value = default_value
-                        else:
-                            raise ValueError(f"Row {row_number}: Empty value found in field '{key}'.")
-                    cleaned_row[key_lower] = value
-
-                if required_fields:
-                    for field_lower in required_lower:
-                        if field_lower not in cleaned_row or cleaned_row[field_lower].strip() == "":
-                            raise ValueError(
-                                f"Row {row_number}: Missing or blank required field '{required_map[field_lower]}'."
-                            )
-
-                data.append(cleaned_row)
-
-            logger.debug(f"Successfully loaded {len(data)} rows from {filepath}.")
-            return data
-
-    except FileNotFoundError:
-        logger.error(f"CSV file not found: {filepath}")
-        raise
-    except ValueError as e:
-        logger.error(f"Validation error in CSV file: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"Error reading CSV file {filepath}: {e}")
-        raise
-def validate_ticket_data(tickets: List[Dict[str, Any]], temp_data: Dict[str, Any], logger: logging.Logger) -> None:
-
-    logger.debug("Validating ticket data...")
-
-    # Extract needed lists from temp_data
-    techs = temp_data.get("techs", [])
-    customers = temp_data.get("customers", [])
-    issue_types = temp_data.get("issue_types", [])
-    statuses = temp_data.get("statuses", [])
-    contacts = temp_data.get("contacts", [])
-    logger.debug(f"Retrieved techs: {techs}, issue_types: {issue_types}, "
-                f"statuses: {statuses}, Ignoring Customers and contacts due to long load")
-    
-    # Build sets of names/values to compare against
-    try:
-        tech_names = {t[1].lower() for t in techs}
-    except Exception as e:
-        logger.error(f"Error extracting tech names: {e}")
-        raise
-    try:                           
-        customer_names = {c["business_name"].lower() for c in customers}
-    except Exception as e:
-        logger.error(f"Error extracting customer names: {e}")
-        raise
-    try:
-        issue_type_names = {i.lower() for i in issue_types}
-    except Exception as e:
-        logger.error(f"Error extracting issue type names: {e}")
-        raise
-    try:
-        status_names = {s for s in statuses} #you can not normalize status names
-    except Exception as e:
-        logger.error(f"Error extracting status names: {e}")
-        raise    
-    try:
-        contact_names = {c["name"].lower() for c in contacts if c["name"]}
-    except Exception as e:
-        logger.error(f"Error extracting contact names: {e}")
-        raise
-
-    for row_num, ticket in enumerate(tickets, start=1):
-        logger.debug(f"Validation for Row {row_num} - Raw ticket data: {ticket}")
-
-        # Retrieve each field from the ticket
-        tech_val = ticket["tech"].strip().lower()
-        customer_val = ticket["ticket customer"].strip().lower()
-        issue_type_val = ticket["ticket issue type"].strip().lower()
-        status_val = ticket["ticket status"] #you can not normalize status names. Must be perfect match
-        contact_val = ticket.get("ticket contact").strip().lower()  # or "contact", if that's the CSV header
-
-        logger.debug(f"Validation Row {row_num} - Checking tech='{tech_val}', customer='{customer_val}', "
-                     f"issue_type='{issue_type_val}', status='{status_val}', contact='{contact_val}'")
-
-        # Check Tech
-        logger.debug(f"Validation Row {row_num}: Checking tech '{tech_val}' against {tech_names}")
-
-        if tech_val not in tech_names:
-            logger.error(f"Row {row_num}: Tech '{tech_val}' not found in API cache.")
-            raise ValueError(f"Row {row_num}: Tech '{tech_val}' not found in API cache.")
-
-        # Check Customer
-        logger.debug(f"Validation Row {row_num}: Checking customer val '{customer_val}' against {customer_names}")
-        if customer_val not in customer_names:
-            logger.error(f"Row {row_num}: Customer '{customer_val}' not found in API cache.")
-            raise ValueError(f"Row {row_num}: Customer '{customer_val}' not found in API cache.")
-
-        # Check Issue Type
-        logger.debug(f"Validation Row {row_num}: Checking issue type val '{issue_type_val}' against {issue_type_names}")
-        if issue_type_val not in issue_type_names:
-            logger.error(f"Row {row_num}: Issue type '{issue_type_val}' not found in API cache.")
-            raise ValueError(f"Row {row_num}: Issue type '{issue_type_val}' not found in API cache.")
-
-        # Check Status
-        logger.debug(f"Validation Row {row_num}: Checking status  val '{status_val}' against {status_names}")
-        if status_val not in status_names:
-            logger.warning("Status names cannot be normalized. Must be perfect match")
-            logger.error(f"Row {row_num}: Status '{status_val}' not found in API cache.")
-            raise ValueError(f"Row {row_num}: Status '{status_val}' not found in API cache.")
-
-        # Check Contact (warn if missing, but don’t error out)
-        if contact_val not in contact_names:
-            logger.warning(f"Row {row_num}: Contact '{contact_val}' not found in API cache.")
-
-        logger.debug(f"Validation Row {row_num} - Validation passed for this ticket.")
-
-    logger.info("All tickets validated successfully.")
-
-def syncro_get_all_tickets_from_csv(config: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-    """
-    Load all tickets from a CSV file and validate them against cached data.
-    """
-    required_fields = [
-        "ticket customer",
-        "ticket number",
-        "ticket subject",
-        "tech",
-        "ticket initial issue",
-        "ticket status",
-        "ticket issue type",
-        "ticket created"
-    ]
-
-    try:
-        logger.info("Checking and Creating _temp_data_cache from API...")
-        temp_data = load_or_fetch_temp_data(config)
-
-        logger.info("Attempting to load tickets from CSV...")
-        tickets = load_csv(TICKETS_CSV_PATH, required_fields=required_fields, logger=logger)
-
-        # Validate data
-        validate_ticket_data(tickets, temp_data, logger)
-
-        logger.debug(f"Successfully loaded {len(tickets)} tickets from {TICKETS_CSV_PATH}.")
-        return tickets
-
-    except FileNotFoundError:
-        logger.error(f"CSV file not found: {TICKETS_CSV_PATH}")
-        raise
-    except ValueError as e:
-        logger.error(f"Validation error in CSV file: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"An unexpected error occurred while loading tickets: {e}")
-        raise
-
 
 def clean_syncro_ticket_number(ticketNumber: str) -> str:
     """
@@ -885,44 +686,6 @@ def get_syncro_issue_type(issue_type: str):
         logger.error(f"Error occurred while matching issue type '{issue_type}': {e}")
         return None
 
-def syncro_get_all_comments_from_csv() -> List[Dict[str, Any]]:
-    """
-    Load all comments from a CSV file.
-
-    Args:
-        logger (logging.Logger, optional): Logger instance for logging.
-
-    Returns:
-        List[Dict[str, Any]]: A list of dictionaries, where each dictionary represents a ticket.
-
-    Raises:
-        Exception: If loading comments fails for any reason.
-    """  
-    required_fields = [        
-        "ticket number",                         
-        "ticket comment",
-        "comment contact", 
-        "comment created"
-    ]
-
-    try:
-        logger.info("Attempting to load comments from CSV...")
-        comments = load_csv(COMMENTS_CSV_PATH, required_fields=required_fields, logger=logger)
-        logger.info(f"Successfully loaded {len(comments)} comments from {COMMENTS_CSV_PATH}.")
-        return comments
-
-    except FileNotFoundError:
-        logger.error(f"CSV file not found: {COMMENTS_CSV_PATH}")
-        raise
-
-    except ValueError as e:
-        logger.error(f"Validation error in CSV file: {e}")
-        raise
-
-    except Exception as e:
-        logger.error(f"An unexpected error occurred while loading comments: {e}")
-        raise
-
 def syncro_prepare_ticket_combined_json(config, ticket):
     """ 
     Used with the tickets_and_comments_combined.csv template
@@ -1258,81 +1021,28 @@ def group_comments_by_ticket_number(comments):
     
     return dict(grouped_comments)
 
-def syncro_get_all_tickets_and_comments_from_combined_csv():
-    
-    
-    logger = get_logger(__name__)
 
-    required_fields = [
-        "ticket customer",
-        "ticket number",  
-        "user",              
-        "ticket subject",
-        "ticket description",
-        "ticket response", 
-        "timestamp",
-        "email body",
-        "ticket status",
-        "ticket issue type",
-        "ticket created date",
-        "ticket priority"
-    ]
+def order_ticket_rows_by_date(tickets: Dict[str, List[dict]]):
+    """Order grouped ticket entries by their timestamp.
 
-    # Ensure logger is initialized
-    if logger is None:
-        logger = logging.getLogger("syncro")
-    
-    try:
-        logger.info("Attempting to load comments from CSV...")
-        comments = load_csv(COMBINED_TICKETS_COMMENTS_CSV_PATH, required_fields=required_fields, logger=logger)
-        grouped_comments_by_ticket_number = group_comments_by_ticket_number(comments)        
-        logger.info(f"Successfully loaded {len(comments)} comments from {COMBINED_TICKETS_COMMENTS_CSV_PATH}.")
-        #logger.info(f"Grouped comments by ticket number: {grouped_comments_by_ticket_number}")
-        return grouped_comments_by_ticket_number
+    Args:
+        tickets: Mapping of ticket number to a list of row dictionaries
+            containing a ``timestamp`` field.
 
-    except FileNotFoundError:
-        logger.error(f"CSV file not found: {COMBINED_TICKETS_COMMENTS_CSV_PATH}")
-        raise
+    Returns:
+        Dict where each ticket number maps to a list of tuples of
+        ``(timestamp, row_dict)`` sorted chronologically.
+    """
 
-    except ValueError as e:
-        logger.error(f"Validation error in CSV file: {e}")
-        raise
+    ordered: Dict[str, List[tuple]] = {}
+    for ticket_number, rows in tickets.items():
+        def _parse(row: Dict[str, Any]):
+            return parse_comment_created(row.get("timestamp")) or datetime.min
 
-    except Exception as e:
-        logger.error(f"An unexpected error occurred while loading comments: {e}")
-        raise
-    
-def order_ticket_rows_by_date(ticket_rows_data):
-    logger.info(f"Ticket Rows Data passed in is a {type(ticket_rows_data)}") 
-    ticket_rows_data = ticket_rows_data.items()
-    logger.info(f"Ticket Rows Data after .items() in is a {type(ticket_rows_data)}")
-    ordered_ticket_rows_data = {}
-    for row in ticket_rows_data:  # each row is one ticket with lots of entries, need to find the oldest entry
-        ordered_entries = []  # this list should hold dict objects of each entry in the ticket
-        ticket_number, ticket_data = row
-        logger.info(f"starting on entries for Ticket Number: {ticket_number}")
+        sorted_rows = sorted(rows, key=_parse)
+        ordered[ticket_number] = [(_parse(r), r) for r in sorted_rows]
 
-        for ticket_entry in ticket_data:  # ticket_data is a list of all the entries in the ticket, should be all the entries in a dict object
-            logger.info(f"Ticket Entry: {ticket_entry}")
-
-            timestamp_str = ticket_entry.get("timestamp")  # I am getting the timestamp of the ticket entry
-            if not timestamp_str:
-                logger.warning("Missing timestamp for ticket %s entry, skipping", ticket_number)
-                continue
-
-            timestamp = parse_comment_created(timestamp_str)
-            if timestamp is None:
-                logger.error("Failed to parse timestamp '%s'", timestamp_str)
-                continue
-
-            ordered_entries.append((timestamp, ticket_entry))  # I am appending the timestamp and the ticket entry to the ordered_entries list
-
-        ordered_entries.sort(key=lambda x: x[0])
-        logger.info(f"ordered_entries type: {type(ordered_entries)}")  
-
-        ordered_ticket_rows_data[ticket_number] = ordered_entries
-
-    return ordered_ticket_rows_data
+    return ordered
 
 def syncro_prepare_row_json(row):
     pass
