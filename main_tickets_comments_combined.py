@@ -1,9 +1,9 @@
 
+from csv_utils import syncro_get_all_tickets_and_comments_from_combined_csv
 from syncro_utils import (
-    syncro_get_all_tickets_and_comments_from_combined_csv,
     order_ticket_rows_by_date,
     syncro_prepare_ticket_combined_comment_json,
-    syncro_prepare_ticket_combined_json
+    syncro_prepare_ticket_combined_json,
 )
 
 from syncro_write import (
