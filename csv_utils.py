@@ -163,6 +163,7 @@ def validate_ticket_data(
         logger.error(f"Error extracting contact names: {e}")
         raise
 
+    use_default_issue_type_for_all: bool | None = None
     for row_num, ticket in enumerate(tickets, start=1):
         logger.debug(f"Validation for Row {row_num} - Raw ticket data: {ticket}")
 
@@ -197,9 +198,31 @@ def validate_ticket_data(
             logger.error(
                 f"Row {row_num}: Issue type '{issue_type_val}' not found in API cache."
             )
-            raise ValueError(
-                f"Row {row_num}: Issue type '{issue_type_val}' not found in API cache."
-            )
+            default_issue_type = DEFAULTS.get("ticket issue type")
+            if not (
+                default_issue_type
+                and default_issue_type.lower() in issue_type_names
+            ):
+                raise ValueError(
+                    f"Row {row_num}: Issue type '{issue_type_val}' not found in API cache."
+                )
+
+            if use_default_issue_type_for_all is None:
+                response = input(
+                    f"Row {row_num}: Issue type '{issue_type_val}' not found. "
+                    f"Use default '{default_issue_type}' for all missing issue types in this import? (y/N): "
+                ).strip().lower()
+                use_default_issue_type_for_all = response == "y"
+
+            if use_default_issue_type_for_all:
+                ticket["ticket issue type"] = default_issue_type
+                logger.info(
+                    f"Row {row_num}: Issue type set to default '{default_issue_type}'."
+                )
+            else:
+                raise ValueError(
+                    f"Row {row_num}: Issue type '{issue_type_val}' not found in API cache."
+                )
 
         if status_val not in status_names:
             logger.warning("Status names cannot be normalized. Must be perfect match")
