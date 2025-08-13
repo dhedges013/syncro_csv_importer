@@ -110,26 +110,43 @@ def load_or_fetch_temp_data(config=None) -> dict:
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_dir)
 
-def get_customer_id_by_name(customer_name: str, config: Dict[str, Any]):#, logger: logging.Logger) -> int:
-    """
-    Retrieve customer ID from temp data based on matching customer name.
+def get_customer_id_by_name(customer_name: str, config: Dict[str, Any]):  # , logger: logging.Logger) -> int:
+    """Retrieve a customer ID by the customer's business name.
 
-    Args:
-        customer_name (str): Customer name to search for.
-        logger (logging.Logger): Logger instance for logging.
+    Parameters
+    ----------
+    customer_name : str
+        The business name of the customer whose ID should be returned.
+    config : Dict[str, Any]
+        Configuration dictionary used to load cached Syncro data.
 
-    Returns:
-        int: Customer ID if found, otherwise None.
+    Returns
+    -------
+    int | None
+        The customer's ID if a single match is found. ``None`` is returned when
+        the name is not present in the cached data. If multiple customers share
+        the name, a ``ValueError`` is raised. Any unexpected error will be
+        logged and re-raised, stopping execution as requested.
 
-    Logs:
-        - Info for successful matches.
-        - Warning if no match is found.
-        - Error if an issue occurs during execution.
+    Notes
+    -----
+    Extensive logging is performed to aid in debugging:
+    - The number of customers loaded from the cache
+    - The normalized search name
+    - Details of the matched customer when successful
+    - Warnings when no customer data is available or a name is not found
+    - Errors when multiple customers match the search name
+    - Full stack traces for unexpected errors
     """
     try:
+        if not customer_name or not customer_name.strip():
+            logger.error("Empty customer name provided to get_customer_id_by_name")
+            raise ValueError("Customer name cannot be empty")
+
         # Load temp data
         temp_data = load_or_fetch_temp_data(config=config)
         customers = temp_data.get("customers", [])
+        logger.debug(f"Loaded {len(customers)} customers from temp data")
 
         if not customers:
             logger.warning("No customer data available. Ensure temp data is correctly loaded.")
@@ -137,26 +154,62 @@ def get_customer_id_by_name(customer_name: str, config: Dict[str, Any]):#, logge
 
         # Normalize input for case-insensitive comparison
         normalized_customer_name = customer_name.strip().lower()
-        logger.debug(f"Normalized customer name: passed in as {customer_name} but is now {normalized_customer_name}")
+        logger.debug(
+            f"Normalized customer name: passed in as '{customer_name}' but is now '{normalized_customer_name}'"
+        )
 
-        # Search for the customer by name
+        # Search for the customer by business or full name
+        matches = []
         for customer in customers:
-            customer_name_in_list = customer.get("business_name", "").strip().lower()
-            if customer_name_in_list == normalized_customer_name:
-                customer_id = customer.get("id")
-                logger.debug(f"Match found: Customer '{customer_name}' matches '{customer['business_name']}' with ID {customer_id}")
-                return customer_id
+            names_to_check = [customer.get("business_name"), customer.get("fullname")]
+            if not any(names_to_check):
+                logger.debug(
+                    f"Skipping customer id {customer.get('id')} with no name fields"
+                )
+                continue
+
+            for name in names_to_check:
+                if not name:
+                    continue
+                if name.strip().lower() == normalized_customer_name:
+                    matches.append(customer)
+                    break
+
+        if len(matches) == 1:
+            customer_id = matches[0].get("id")
+            logger.debug(
+                "Match found: Customer '%s' matches '%s' with ID %s",
+                customer_name,
+                matches[0].get("business_name") or matches[0].get("fullname"),
+                customer_id,
+            )
+            return customer_id
+
+        if len(matches) > 1:
+            ids = [c.get("id") for c in matches]
+            logger.error(
+                "Multiple customers found matching '%s': %s",
+                customer_name,
+                ids,
+            )
+            raise ValueError(
+                f"Multiple customers match '{customer_name}'; IDs: {ids}"
+            )
 
         logger.warning(f"Customer not found: {customer_name}")
         return None
 
     except KeyError as e:
-        logger.error(f"Key error while accessing customer data: {e}")
-        return None
+        logger.exception(
+            f"Key error while accessing customer data for '{customer_name}': {e}"
+        )
+        raise
 
     except Exception as e:
-        logger.error(f"An unexpected error occurred in get_customer_id_by_name: {e}")
-        return None
+        logger.exception(
+            f"An unexpected error occurred in get_customer_id_by_name for '{customer_name}': {e}"
+        )
+        raise
  
 def check_duplicate_customer(config,customer_name: str) -> bool:
     """
