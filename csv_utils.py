@@ -197,9 +197,25 @@ def validate_ticket_data(
             logger.error(
                 f"Row {row_num}: Issue type '{issue_type_val}' not found in API cache."
             )
-            raise ValueError(
-                f"Row {row_num}: Issue type '{issue_type_val}' not found in API cache."
-            )
+            default_issue_type = DEFAULTS.get("ticket issue type")
+            if default_issue_type and default_issue_type.lower() in issue_type_names:
+                response = input(
+                    f"Row {row_num}: Issue type '{issue_type_val}' not found. "
+                    f"Use default '{default_issue_type}' instead? (y/N): "
+                ).strip().lower()
+                if response == "y":
+                    ticket["ticket issue type"] = default_issue_type
+                    logger.info(
+                        f"Row {row_num}: Issue type set to default '{default_issue_type}'."
+                    )
+                else:
+                    raise ValueError(
+                        f"Row {row_num}: Issue type '{issue_type_val}' not found in API cache."
+                    )
+            else:
+                raise ValueError(
+                    f"Row {row_num}: Issue type '{issue_type_val}' not found in API cache."
+                )
 
         if status_val not in status_names:
             logger.warning("Status names cannot be normalized. Must be perfect match")

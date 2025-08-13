@@ -8,10 +8,11 @@ from syncro_configs import get_logger
 logger = get_logger(__name__)
 def run_tickets(config):
     try:
-        tickets = syncro_get_all_tickets_from_csv(config)        
+        tickets = syncro_get_all_tickets_from_csv(config)
         logger.info(f"Loaded tickets: {len(tickets)}")
     except Exception as e:
         logger.critical(f"Failed to load tickets: {e}")
+        return
 
     for ticket in tickets:
         ticket_json = syncro_prepare_ticket_json(config,ticket)
