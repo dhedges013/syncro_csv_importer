@@ -1,3 +1,7 @@
+# Open Issues
+When pulling in the Cache'd Customer list if the Business Name is "BLANK" or Null there is no error handing for this
+When Attempting to create a ticket if there is no Customer ID found on the lookup, the import still tries to create a ticket resulting in an error. needs Validation checks before hand and error handing to stop the import 
+
 # syncro_csv_import
  unoffical ticket and comment import tool
 
