@@ -267,7 +267,10 @@ def build_ticket_payload(ticket: Dict[str, object], defaults: Dict[str, Optional
 
     number_raw = str(ticket.get("number", ""))
     cleaned_number = clean_syncro_ticket_number(number_raw) or number_raw
-    subject = ticket.get("subject") or f"Imported Ticket {cleaned_number}" if cleaned_number else "Imported Ticket"
+    ticket_subject = (
+        ticket.get("subject")
+        or f"Imported Ticket {cleaned_number}" if cleaned_number else "Imported Ticket"
+    )
     assignee = ticket.get("assignee") or defaults.get("assignee")
 
     created_raw = ticket.get("created_at") or defaults.get("created_at")
@@ -288,10 +291,10 @@ def build_ticket_payload(ticket: Dict[str, object], defaults: Dict[str, Optional
             continue
         candidate = parse_datetime(comment.created_at) if comment.created_at else None
         current_datetime = ensure_future(current_datetime, candidate)
-        subject = comment.subject or f"Comment {offset + 2}"
+        comment_subject = comment.subject or f"Comment {offset + 2}"
         author = comment.author or assignee or defaults.get("assignee")
         additional_comments.append(
-            build_comment_payload(subject, comment.body, current_datetime, author)
+            build_comment_payload(comment_subject, comment.body, current_datetime, author)
         )
 
     customer_name = ticket.get("customer") or defaults.get("customer")
@@ -306,7 +309,7 @@ def build_ticket_payload(ticket: Dict[str, object], defaults: Dict[str, Optional
 
     payload: Dict[str, object] = {
         "number": cleaned_number,
-        "subject": subject,
+        "subject": ticket_subject,
         "created_at": get_syncro_created_date(base_datetime),
         "comments_attributes": [description_comment],
     }
