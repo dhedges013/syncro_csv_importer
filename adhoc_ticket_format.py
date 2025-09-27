@@ -381,7 +381,7 @@ def create_ticket_with_comments(config, payload: Dict[str, object]) -> bool:
         syncro_create_comment(config, comment_data)
 
     push_comment(change_plan_comment)
-    for comment in additional_comments:
+    for comment in reversed(additional_comments):
         push_comment(comment)
 
     return True
