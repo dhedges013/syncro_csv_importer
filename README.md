@@ -53,6 +53,7 @@ Importer doesnt account for:
    - Run `cli.py` to load in the tickets or comments.  
    - You will be prompted to choose logging level, Clear Temp_Data, Enter Subdomain and API Key
    - Last will ask you to pick either Ticket or Comments to import.
+   - Option 4 will generate timer entries for the most recent 25 tickets using your techs and labor products.
    - Data is validated on csv load and will error out of the import without the csv being filled out
 
 

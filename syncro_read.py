@@ -1,4 +1,6 @@
 import time
+from typing import List
+
 import requests
 
 # Import from syncro_config and utils
@@ -126,7 +128,7 @@ def syncro_get_all_contacts(config):
  
 def syncro_get_all_tickets(config):
     endpoint = '/tickets'
-    try:        
+    try:
         tickets = syncro_api_call_paginated(config, endpoint)
         logger.debug(f"Retrieved {len(tickets)} tickets: {tickets}")
         return tickets
@@ -134,16 +136,50 @@ def syncro_get_all_tickets(config):
         logger.error(f"Error fetching tickets: {e}")
         return []
 
+
+def syncro_get_recent_tickets(config, limit: int = 25) -> List[dict]:
+    """Fetch the most recent Syncro tickets up to the provided limit."""
+    endpoint = '/tickets'
+    params = {
+        "page": 1,
+        "per_page": limit,
+        "sort": "created_at",
+        "order": "desc",
+    }
+
+    try:
+        response = syncro_api_call(config, "GET", endpoint, params=params)
+        tickets = response.get("tickets", []) if response else []
+        logger.info(f"Fetched {len(tickets)} recent tickets")
+        return tickets[:limit]
+    except Exception as exc:
+        logger.error(f"Error fetching recent tickets: {exc}")
+        return []
+
 def syncro_get_all_techs(config):
     """Fetch all techs (users) from SyncroMSP API."""
     endpoint = '/users'
-    try:   
-        techs = syncro_api_call_paginated(config, endpoint)      
-        logger.debug(f"Retrieved {len(techs)} techs: {techs}")        
+    try:
+        techs = syncro_api_call_paginated(config, endpoint)
+        logger.debug(f"Retrieved {len(techs)} techs: {techs}")
         return techs
 
     except Exception as e:
         logger.error(f"Error fetching techs: {e}")
+        return []
+
+
+def syncro_get_labor_products(config) -> List[dict]:
+    """Retrieve all labor products that can be used for timer entries."""
+    endpoint = '/products'
+    params = {"type": "labor"}
+
+    try:
+        products = syncro_api_call_paginated(config, endpoint, params=params)
+        logger.info(f"Retrieved {len(products)} labor products")
+        return products
+    except Exception as exc:
+        logger.error(f"Error fetching labor products: {exc}")
         return []
 
 def syncro_get_ticket_data(config, ticket_id: int):

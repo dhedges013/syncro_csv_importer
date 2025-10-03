@@ -210,7 +210,7 @@ def syncro_create_comment(config,comment_data: dict) -> dict:
         else:
             logger.error(f"Failed to create ticket. Response: {response}")
             return None
-        
+
     except requests.exceptions.HTTPError as http_err:
         # Log HTTP error details
         logger.error(f"HTTP error occurred: {http_err}")
@@ -222,6 +222,30 @@ def syncro_create_comment(config,comment_data: dict) -> dict:
         # Log unexpected errors
         logger.error(f"Unexpected error occurred while creating ticket: {e}")
         return None
+
+
+def syncro_create_time_entry(config, ticket_id: int, time_entry_data: dict) -> dict:
+    """Create a time entry on a ticket."""
+
+    endpoint = f"/tickets/{ticket_id}/time_entries"
+    payload = {"time_entry": time_entry_data}
+
+    try:
+        response = syncro_api_call(config, "POST", endpoint, data=payload)
+        if response:
+            logger.info(
+                "Created time entry on ticket %s for user %s (%s minutes)",
+                ticket_id,
+                time_entry_data.get("user_id"),
+                time_entry_data.get("minutes"),
+            )
+        else:
+            logger.error("Failed to create time entry for ticket %s", ticket_id)
+        return response
+    except Exception as exc:
+        logger.error(f"Error creating time entry for ticket {ticket_id}: {exc}")
+        return None
+
 
 if __name__ == "__main__":
     print("This module is not intended to be run directly.")
