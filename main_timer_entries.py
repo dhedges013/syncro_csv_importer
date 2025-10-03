@@ -5,12 +5,14 @@ from __future__ import annotations
 import random
 from collections import defaultdict
 from datetime import datetime, time, timedelta, tzinfo
-from typing import Dict, List
+import json
+import os
+from typing import Any, Dict, List, Optional
 
 import pytz
 from dateutil import parser
 
-from syncro_configs import SYNCRO_TIMEZONE, get_logger
+from syncro_configs import SYNCRO_TIMEZONE, TEMP_FILE_PATH, get_logger
 from syncro_read import (
     syncro_get_all_techs,
     syncro_get_labor_products,
@@ -27,6 +29,21 @@ MIN_UTILIZATION = 0.30
 MAX_UTILIZATION = 0.80
 MIN_ENTRY_MINUTES = 15
 MAX_ENTRY_MINUTES = 240
+
+
+def _coerce_bool(value: Any) -> bool:
+    """Best-effort conversion of a value to a boolean."""
+
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, (int, float)):
+        return value != 0
+
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+
+    return bool(value)
 
 
 def _normalize_datetime(value: str, tz: tzinfo) -> datetime:
@@ -91,6 +108,85 @@ def _generate_durations(entry_count: int) -> List[int]:
     return durations
 
 
+def _load_cached_section(section: str) -> List[Any]:
+    """Load cached data from the temp file if it exists."""
+
+    if not os.path.exists(TEMP_FILE_PATH):
+        return []
+
+    try:
+        with open(TEMP_FILE_PATH, "r", encoding="utf-8") as handle:
+            cached = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Unable to load cached data from %s: %s", TEMP_FILE_PATH, exc)
+        return []
+
+    section_data = cached.get(section, []) if isinstance(cached, dict) else []
+    if section_data:
+        logger.info("Loaded %s entries from cached %s data.", len(section_data), section)
+    return section_data
+
+
+def _normalize_tech(record: Any) -> Optional[Dict[str, Any]]:
+    """Normalize various tech representations into a common dict."""
+
+    if isinstance(record, dict):
+        candidate = record.get("user") if isinstance(record.get("user"), dict) else record
+        tech_id = (
+            candidate.get("id")
+            or candidate.get("user_id")
+            or record.get("id")
+            or record.get("user_id")
+        )
+        if tech_id is None:
+            return None
+
+        name = (
+            candidate.get("name")
+            or candidate.get("full_name")
+            or record.get("name")
+            or record.get("full_name")
+        )
+        disabled = _coerce_bool(candidate.get("disabled", record.get("disabled", False)))
+        return {"id": tech_id, "name": name, "disabled": disabled}
+
+    if isinstance(record, (list, tuple)) and record:
+        tech_id = record[0]
+        if tech_id in {None, ""}:
+            return None
+        name = record[1] if len(record) > 1 else None
+        disabled = _coerce_bool(record[2]) if len(record) > 2 else False
+        return {"id": tech_id, "name": name, "disabled": disabled}
+
+    return None
+
+
+def _normalize_labor_product(record: Any) -> Optional[Dict[str, Any]]:
+    """Normalize labor product data into a common dict structure."""
+
+    if isinstance(record, dict):
+        product = record.get("product") if isinstance(record.get("product"), dict) else record
+        product_id = product.get("id") or record.get("id")
+        if product_id is None:
+            return None
+
+        name = product.get("name") or record.get("name")
+        archived = _coerce_bool(product.get("archived", record.get("archived", False)))
+        normalized = dict(product)
+        normalized.update({"id": product_id, "name": name, "archived": archived})
+        return normalized
+
+    if isinstance(record, (list, tuple)) and record:
+        product_id = record[0]
+        if product_id in {None, ""}:
+            return None
+        name = record[1] if len(record) > 1 else None
+        archived = _coerce_bool(record[2]) if len(record) > 2 else False
+        return {"id": product_id, "name": name, "archived": archived}
+
+    return None
+
+
 def _generate_time_entries_for_day(date_key, assignments, labor_products, tz):
     """Generate timer entries for a single date keyed by tech."""
     generated_entries = []
@@ -142,19 +238,29 @@ def build_timer_entries(config) -> List[Dict]:
         logger.warning("No recent tickets retrieved. Aborting timer entry creation.")
         return []
 
+    raw_techs = syncro_get_all_techs(config) or []
+    if not raw_techs and hasattr(config, "techs"):
+        raw_techs = getattr(config, "techs") or []
+    if not raw_techs:
+        raw_techs = _load_cached_section("techs")
+
     techs = [
         tech
-        for tech in syncro_get_all_techs(config)
-        if tech.get("id") and not tech.get("disabled", False)
+        for tech in (_normalize_tech(item) for item in raw_techs)
+        if tech and tech.get("id") and not tech.get("disabled", False)
     ]
     if not techs:
         logger.error("No techs available to assign timer entries.")
         return []
 
+    raw_labor_products = syncro_get_labor_products(config) or []
+    if not raw_labor_products and hasattr(config, "labor_products"):
+        raw_labor_products = getattr(config, "labor_products") or []
+
     labor_products = [
         product
-        for product in syncro_get_labor_products(config)
-        if product.get("id") and not product.get("archived", False)
+        for product in (_normalize_labor_product(item) for item in raw_labor_products)
+        if product and product.get("id") and not product.get("archived", False)
     ]
     if not labor_products:
         logger.error("No labor products found. Unable to create timer entries.")
