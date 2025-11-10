@@ -932,11 +932,11 @@ def syncro_prepare_ticket_combined_json(config, ticket):
 
     required_fields = [
         "ticket customer",
-        "ticket number",  
-        "user",              
+        "ticket number",
+        "tech",
+        "end user",
         "ticket subject",
         "ticket description",
-        "ticket response", 
         "timestamp",
         "email body",
         "ticket status",
@@ -949,21 +949,21 @@ def syncro_prepare_ticket_combined_json(config, ticket):
     customer = ticket.get("ticket customer")
     ticket_number = ticket.get("ticket number")
     subject = ticket.get("ticket subject")
-    #Missing Tech
+    tech_name = ticket.get("tech")
     initial_issue = ticket.get("ticket description") or DEFAULTS.get("ticket description")
     status = ticket.get("ticket status")
     issue_type = ticket.get("ticket issue type") or DEFAULTS.get("ticket issue type")
     created = ticket.get("ticket created date")
-    contact = ticket.get("user") or ticket.get("ticket user")
+    end_user = ticket.get("end user") or ticket.get("ticket user")
     priority = ticket.get("ticket priority")
 
     # Process fields
     customer_id = get_customer_id_by_name(customer, config)
     syncro_ticket_number = clean_syncro_ticket_number(ticket_number) 
-    #Missing processing Tech data   
     syncro_created_date = get_syncro_created_date(created)
-    syncro_contact = get_syncro_customer_contact(customer_id, contact)
-    initial_issue_comments = build_syncro_initial_issue(initial_issue, contact, syncro_created_date)
+    syncro_contact = get_syncro_customer_contact(customer_id, end_user)
+    syncro_tech = get_syncro_tech(tech_name) if tech_name else None
+    initial_issue_comments = build_syncro_initial_issue(initial_issue, tech_name or end_user, syncro_created_date)
     syncro_issue_type = get_syncro_issue_type(issue_type)
     syncro_priority = get_syncro_priority(priority)
 
@@ -972,7 +972,7 @@ def syncro_prepare_ticket_combined_json(config, ticket):
         "customer_id": customer_id,
         "number": syncro_ticket_number,
         "subject": subject,
-        #"user_id": syncro_tech,        
+        "user_id": syncro_tech,
         "comments_attributes": initial_issue_comments,
         "status": status,
         "problem_type": syncro_issue_type,
@@ -1079,11 +1079,11 @@ def syncro_prepare_ticket_combined_comment_json(comment):
     
     required_fields = [
         "ticket customer",
-        "ticket number",  
-        "user",              
+        "ticket number",
+        "tech",
+        "end user",
         "ticket subject",
         "ticket description",
-        "ticket response", 
         "timestamp",
         "email body",
         "ticket status",
@@ -1104,7 +1104,7 @@ def syncro_prepare_ticket_combined_comment_json(comment):
     customer = comment.get("ticket customer") #need for contact lookup
     ticket_number = comment.get("ticket number")
     ticket_comment = comment.get("email body") or DEFAULTS.get("email body")
-    comment_contact = comment.get("user")
+    comment_contact = comment.get("tech") or comment.get("end user")
 
     # Create JSON payload for a Syncro comment
     comment_json = {
@@ -1265,11 +1265,11 @@ def syncro_get_all_tickets_and_comments_from_combined_csv():
 
     required_fields = [
         "ticket customer",
-        "ticket number",  
-        "user",              
+        "ticket number",
+        "tech",
+        "end user",
         "ticket subject",
         "ticket description",
-        "ticket response", 
         "timestamp",
         "email body",
         "ticket status",

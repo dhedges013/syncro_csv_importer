@@ -1,1 +1,1 @@
-ticket customer,ticket number,user,ticket subject,ticket description,ticket response,timestamp,email body,ticket status,ticket issue type,ticket created date,ticket priority
+ticket customer,ticket number,tech,end user,ticket subject,ticket description,timestamp,email body,ticket status,ticket issue type,ticket created date,ticket priority
