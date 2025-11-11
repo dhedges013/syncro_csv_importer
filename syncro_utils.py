@@ -592,7 +592,7 @@ def build_syncro_initial_issue(initial_issue: str, syncroContact: str, created_a
         # Build the JSON structure as a list of comments
         initial_issue_comments = []
         comment = {
-                "subject": "CSV Import",
+                "subject": "Initial Issue",
                 "body": initial_issue,
                 "hidden": True,
                 "do_not_email": True,
