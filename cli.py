@@ -2,8 +2,6 @@
 import os
 from syncro_config_object import SyncroConfig
 from syncro_configs import setup_logging, get_logger, TEMP_FILE_PATH, SYNCRO_API_KEY, SYNCRO_SUBDOMAIN
-from main_tickets import run_tickets
-from main_comments import run_comments
 from main_tickets_comments_combined import run_tickets_comments_combined
 from main_ticket_labor import run_ticket_labor
 import logging
@@ -85,22 +83,16 @@ def main_menu():
     check_and_clear_temp_data()
     config = prompt_for_missing_credentials()
     print("Choose your importer:")
-    print("1. Tickets")
-    print("2. Comments")
-    print("3. Tickets and Comments Combined")
-    print("4. Ticket Labor Entries")
-    choice = input("Enter 1, 2, 3 or 4: ").strip()
+    print("1. Tickets and Comments Combined")
+    print("2. Ticket Labor Entries")
+    choice = input("Enter 1 or 2: ").strip()
 
     if choice == "1":
-        run_tickets(config)
-    elif choice == "2":
-        run_comments(config)
-    elif choice == "3":
         run_tickets_comments_combined(config)
-    elif choice == "4":
+    elif choice == "2":
         run_ticket_labor(config)
     else:
-        print("Invalid selection. Please enter 1, 2, 3 or 4.")
+        print("Invalid selection. Please enter 1 or 2.")
 
 
 if __name__ == "__main__":
