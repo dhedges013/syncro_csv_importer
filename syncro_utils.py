@@ -1,5 +1,4 @@
 import os
-import sys
 from datetime import datetime, timedelta
 from dateutil import parser
 import json
@@ -13,8 +12,6 @@ from syncro_configs import (
     get_logger,
     TEMP_FILE_PATH,
     SYNCRO_TIMEZONE,
-    TICKETS_CSV_PATH,
-    COMMENTS_CSV_PATH,
     COMBINED_TICKETS_COMMENTS_CSV_PATH,
     LABOR_ENTRIES_CSV_PATH,
     is_day_first,
@@ -110,9 +107,6 @@ def load_or_fetch_temp_data(config=None) -> dict:
 
     return _temp_data_cache
 
-# Add parent directory to sys.path for imports
-parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, parent_dir)
 
 def get_customer_id_by_name(customer_name: str, config: Dict[str, Any]):#, logger: logging.Logger) -> int:
     """
@@ -449,45 +443,6 @@ def validate_ticket_data(tickets: List[Dict[str, Any]], temp_data: Dict[str, Any
         logger.debug(f"Validation Row {row_num} - Validation passed for this ticket.")
 
     logger.info("All tickets validated successfully.")
-
-def syncro_get_all_tickets_from_csv(config: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-    """
-    Load all tickets from a CSV file and validate them against cached data.
-    """
-    required_fields = [
-        "ticket customer",
-        "ticket number",
-        "ticket subject",
-        "tech",
-        "ticket initial issue",
-        "ticket status",
-        "ticket issue type",
-        "ticket created"
-    ]
-
-    try:
-        logger.info("Checking and Creating _temp_data_cache from API...")
-        temp_data = load_or_fetch_temp_data(config)
-
-        logger.info("Attempting to load tickets from CSV...")
-        tickets = load_csv(TICKETS_CSV_PATH, required_fields=required_fields, logger=logger)
-
-        # Validate data
-        validate_ticket_data(tickets, temp_data, logger)
-
-        logger.debug(f"Successfully loaded {len(tickets)} tickets from {TICKETS_CSV_PATH}.")
-        return tickets
-
-    except FileNotFoundError:
-        logger.error(f"CSV file not found: {TICKETS_CSV_PATH}")
-        raise
-    except ValueError as e:
-        logger.error(f"Validation error in CSV file: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"An unexpected error occurred while loading tickets: {e}")
-        raise
-
 
 def clean_syncro_ticket_number(ticketNumber: str) -> str:
     """
@@ -1092,44 +1047,6 @@ def syncro_prepare_ticket_labor_json(
 
     return cleaned_payload
 
-def syncro_get_all_comments_from_csv() -> List[Dict[str, Any]]:
-    """
-    Load all comments from a CSV file.
-
-    Args:
-        logger (logging.Logger, optional): Logger instance for logging.
-
-    Returns:
-        List[Dict[str, Any]]: A list of dictionaries, where each dictionary represents a ticket.
-
-    Raises:
-        Exception: If loading comments fails for any reason.
-    """  
-    required_fields = [        
-        "ticket number",                         
-        "ticket comment",
-        "comment contact", 
-        "comment created"
-    ]
-
-    try:
-        logger.info("Attempting to load comments from CSV...")
-        comments = load_csv(COMMENTS_CSV_PATH, required_fields=required_fields, logger=logger)
-        logger.info(f"Successfully loaded {len(comments)} comments from {COMMENTS_CSV_PATH}.")
-        return comments
-
-    except FileNotFoundError:
-        logger.error(f"CSV file not found: {COMMENTS_CSV_PATH}")
-        raise
-
-    except ValueError as e:
-        logger.error(f"Validation error in CSV file: {e}")
-        raise
-
-    except Exception as e:
-        logger.error(f"An unexpected error occurred while loading comments: {e}")
-        raise
-
 def syncro_prepare_ticket_combined_json(config, ticket):
     """ 
     Used with the tickets_and_comments_combined.csv template
@@ -1281,8 +1198,8 @@ def syncro_prepare_ticket_combined_comment_json(config, comment):
     """
     Used with the tickets_and_comments_combined.csv template
 
-    This is the comment creation. for the combined template. for the the intial ticket creation
-    look for syncro_prepare_ticket_json function
+    This prepares a follow-up comment for the combined template once the
+    initial ticket has been created.
 
     
     required_fields = [
@@ -1359,104 +1276,6 @@ def syncro_prepare_ticket_combined_comment_json(config, comment):
     }
 
     # Remove keys with None values, 
-    comment_json = {key: value for key, value in comment_json.items() if value is not None}
-
-    return comment_json
-def syncro_prepare_ticket_json(config,ticket):
-    """
-    Extract ticket data into variables and create a JSON package for Syncro ticket creation.
-    Removes fields with None values.
-
-    Args:
-        ticket (dict): Ticket data dictionary.
-
-    Returns:
-        dict: JSON payload for Syncro ticket creation.
-    """
-    # Extract individual fields
-    customer = ticket.get("ticket customer")
-    ticket_number = ticket.get("ticket number")
-    subject = ticket.get("ticket subject")
-    tech = ticket.get("tech")
-    initial_issue = ticket.get("ticket initial issue") or DEFAULTS.get("ticket description")
-    status = ticket.get("ticket status")
-    issue_type = ticket.get("ticket issue type") or DEFAULTS.get("ticket issue type")
-    created = ticket.get("ticket created")
-    contact = ticket.get("ticket contact")
-    priority = ticket.get("ticket priority")
-
-    # Process fields
-    customer_id = get_customer_id_by_name(customer,config)  #function is in syncro_reads
-    syncro_ticket_number = clean_syncro_ticket_number(ticket_number) #function is in syncro_utils
-    syncro_tech = get_syncro_tech(tech) #function is in syncro_utils
-    syncro_created_date = get_syncro_created_date(created) #function is in syncro_utils
-    syncro_contact = get_syncro_customer_contact(customer_id, contact) #function is in syncro_utils
-    initial_issue_comments = build_syncro_initial_issue(initial_issue, contact) #function is in syncro_utils
-    syncro_issue_type = get_syncro_issue_type(issue_type) #function is in syncro_utils
-    syncro_priority = get_syncro_priority(priority) #function is in syncro_utils
-
-    # Create JSON payload
-    ticket_json = {
-        "customer_id": customer_id,
-        "number": syncro_ticket_number,
-        "subject": subject,
-        "user_id": syncro_tech,
-        "comments_attributes": initial_issue_comments,
-        "status": status,
-        "problem_type": syncro_issue_type,
-        "created_at": syncro_created_date,
-        "contact_id": syncro_contact,
-        "priority": syncro_priority,
-    }
-
-    # Remove keys with None values
-    ticket_json = {key: value for key, value in ticket_json.items() if value is not None}
-    return ticket_json
-
-def syncro_prepare_comments_json(comment):
-    """
-    Extract ticket data into variables and create a JSON package for Syncro ticket creation.
-    Removes fields with None values.
-
-    Args:
-        ticket (dict): Ticket data dictionary.
-
-    Returns:
-        dict: JSON payload for Syncro ticket creation.
-    """    
-    required_fields = [        
-        "ticket number", 
-        "comment subject",                       
-        "ticket comment",
-        "comment contact",
-        "comment created"
-    ]
-
-    # Extract individual fields 
-    ticket_number = comment.get("ticket number") 
-    comment_subject = comment.get("comment subject")
-    ticket_comment = comment.get("ticket comment") or DEFAULTS.get("email body")  # I tried but it didnt work
-    comment_created_raw = comment.get("comment created")
-    comment_contact = comment.get("comment contact") # System, Daniel Hedges, Sally Joe
-
-    # Process fields
-    syncro_created_date = parse_comment_created(comment_created_raw)
-    if not syncro_created_date:
-        logger.error(f"Invalid comment created date: {comment_created_raw}")
-        return None
-
-    # Create JSON payload
-    comment_json = {
-        "ticket_number": ticket_number,
-        "subject": comment_subject,
-        "created_at": syncro_created_date,
-        "tech": comment_contact,
-        "body": ticket_comment,
-        "hidden": True,
-        "do_not_email": True
-    }
-
-    # Remove keys with None values
     comment_json = {key: value for key, value in comment_json.items() if value is not None}
 
     return comment_json
@@ -1579,18 +1398,3 @@ def order_ticket_rows_by_date(ticket_rows_data):
 
     return ordered_ticket_rows_data
 
-def syncro_prepare_row_json(row):
-    pass
-
-
-if __name__ == "__main__":
-    
-    comment_created = "6/12/2024 15:00"
-    date = parse_comment_created(comment_created)
-    print(date)
-    
-    tickets = syncro_get_all_tickets_and_comments_from_combined_csv()    
-    tickets_in_order = order_ticket_rows_by_date(tickets)
-    logger.info(f"Tickets in order type: {type(tickets_in_order)}")
-    for key, value in tickets_in_order.items():
-        logger.info(f"Key: {key}, Value Type: {type(value)}")

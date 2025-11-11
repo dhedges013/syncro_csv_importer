@@ -4,8 +4,6 @@ from datetime import datetime
 
 # syncro_configs.py
 SYNCRO_TIMEZONE = "America/New_York"
-TICKETS_CSV_PATH = "tickets.csv"
-COMMENTS_CSV_PATH = "ticket_comments.csv"
 LABOR_ENTRIES_CSV_PATH = "ticket_labor_entries.csv"
 TEMP_FILE_PATH = "syncro_temp_data.json"
 COMBINED_TICKETS_COMMENTS_CSV_PATH = "tickets_and_comments_combined.csv"
