@@ -93,7 +93,28 @@ def syncro_api_call_paginated(config, endpoint: str, params=None) -> list:
         logger.debug(f"Fetched {len(page_data)} records from page {current_page}.")
 
         meta = response.get("meta", {})
-        if meta.get("page", 1) >= meta.get("total_pages", 1):
+        current_meta_page = meta.get("page", 1)
+        current_meta_total = meta.get("total_pages", 1)
+
+        try:
+            current_meta_page = int(current_meta_page)
+        except (TypeError, ValueError):
+            logger.debug(
+                "Unable to parse current page value '%s' from meta; defaulting to 1.",
+                current_meta_page,
+            )
+            current_meta_page = 1
+
+        try:
+            current_meta_total = int(current_meta_total)
+        except (TypeError, ValueError):
+            logger.debug(
+                "Unable to parse total pages value '%s' from meta; defaulting to 1.",
+                current_meta_total,
+            )
+            current_meta_total = 1
+
+        if current_meta_page >= current_meta_total:
             break  # Stop if we have reached the last page
 
         current_page += 1
