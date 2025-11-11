@@ -144,6 +144,42 @@ def syncro_create_ticket(config,ticket_data: dict) -> dict:
         logger.error(f"Unexpected error occurred while creating ticket: {e}")
         return None
 
+def syncro_create_ticket_timer_entry(config, ticket_id: int, timer_data: dict) -> dict:
+    """Create a ticket timer (labor) entry on an existing Syncro ticket."""
+
+    endpoint = f"/tickets/{ticket_id}/timer_entry"
+
+    try:
+        payload = {
+            key: (value.isoformat() if isinstance(value, datetime) else value)
+            for key, value in timer_data.items()
+        }
+
+        logger.info(
+            f"Creating ticket timer entry for ticket ID {ticket_id} with payload: {payload}"
+        )
+
+        response = syncro_api_call(config, "POST", endpoint, data=payload)
+
+        if response and "error" not in response:
+            logger.info(f"Successfully created timer entry for ticket ID {ticket_id}.")
+            return response
+
+        logger.error(
+            f"Failed to create timer entry for ticket ID {ticket_id}. Response: {response}"
+        )
+        return None
+
+    except requests.exceptions.HTTPError as http_err:
+        logger.error(f"HTTP error occurred while creating timer entry: {http_err}")
+        if hasattr(http_err, "response") and http_err.response is not None:
+            logger.error(f"Response content: {http_err.response.text}")
+        return None
+
+    except Exception as e:
+        logger.error(f"Unexpected error occurred while creating timer entry: {e}")
+        return None
+
 def syncro_create_comment(config,comment_data: dict) -> dict:
     """
     Create a new comment in SyncroMSP using the specified fields.

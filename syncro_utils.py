@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateutil import parser
 import json
 import logging
@@ -16,6 +16,7 @@ from syncro_configs import (
     TICKETS_CSV_PATH,
     COMMENTS_CSV_PATH,
     COMBINED_TICKETS_COMMENTS_CSV_PATH,
+    LABOR_ENTRIES_CSV_PATH,
     is_day_first,
     get_timestamp_format,
 )
@@ -25,7 +26,8 @@ from syncro_read import (
     syncro_get_issue_types,
     syncro_get_all_customers,
     syncro_get_all_contacts,
-    syncro_get_ticket_statuses
+    syncro_get_ticket_statuses,
+    syncro_get_all_products
 )
 
 _temp_data_cache = None  # Global cache for temp data
@@ -86,13 +88,15 @@ def load_or_fetch_temp_data(config=None) -> dict:
         customers = syncro_get_all_customers(config)
         contacts = syncro_get_all_contacts(config)
         statuses = syncro_get_ticket_statuses(config)
+        products = syncro_get_all_products(config)
 
         _temp_data_cache = {
             "techs": techs,
             "issue_types": issue_types,
             "customers": customers,
             "contacts": contacts,
-            "statuses": statuses
+            "statuses": statuses,
+            "products": products,
         }
 
         # Save to temp file
@@ -884,6 +888,198 @@ def get_syncro_issue_type(issue_type: str):
     except Exception as e:
         logger.error(f"Error occurred while matching issue type '{issue_type}': {e}")
         return None
+
+def get_syncro_product_id_by_name(product_name: str, config=None) -> Optional[int]:
+    """Return the product ID that matches ``product_name`` (case-insensitive)."""
+
+    if not product_name:
+        logger.debug("No product name provided for lookup.")
+        return None
+
+    try:
+        temp_data = load_or_fetch_temp_data(config=config)
+        products = temp_data.get("products", [])
+
+        if not products:
+            logger.warning("Product list is empty; unable to match labor type to a product.")
+            return None
+
+        normalized_name = product_name.strip().lower()
+
+        for product in products:
+            if isinstance(product, dict):
+                name = str(product.get("name", "")).strip().lower()
+                if name == normalized_name:
+                    product_id = product.get("id")
+                    logger.debug(f"Matched product '{product_name}' to ID '{product_id}'.")
+                    return product_id
+
+        logger.warning(f"Unable to match labor type '{product_name}' to a Syncro product.")
+        return None
+
+    except Exception as e:
+        logger.error(f"Unexpected error while looking up product '{product_name}': {e}")
+        return None
+
+def parse_visibility_value(visibility: Optional[str]) -> Optional[bool]:
+    """Convert human-friendly visibility strings into Syncro's hidden flag."""
+
+    if visibility is None:
+        return None
+
+    normalized = visibility.strip().lower()
+    if normalized in {"private", "internal", "hidden"}:
+        return True
+    if normalized in {"public", "customer", "external"}:
+        return False
+
+    logger.warning(f"Unrecognized visibility value '{visibility}'.")
+    return None
+
+def parse_billable_status(status: Optional[str]) -> Optional[bool]:
+    """Convert billable status text into a boolean override flag."""
+
+    if status is None:
+        return None
+
+    normalized = status.strip().lower()
+    if normalized in {"billable", "billed"}:
+        return True
+    if normalized in {"non-billable", "non billable", "not billable", "unbillable"}:
+        return False
+
+    logger.warning(f"Unrecognized billable status '{status}'.")
+    return None
+
+def syncro_get_all_ticket_labor_entries_from_csv() -> List[Dict[str, Any]]:
+    """Load ticket labor entries from CSV with validation."""
+
+    required_fields = [
+        "customer",
+        "ticket number",
+        "entry sequence",
+        "tech",
+        "duration minutes",
+        "visibility",
+        "billable status",
+        "labor type",
+        "created at",
+        "notes",
+    ]
+
+    try:
+        logger.info("Attempting to load ticket labor entries from CSV...")
+        entries = load_csv(LABOR_ENTRIES_CSV_PATH, required_fields=required_fields, logger=logger)
+        logger.info(
+            f"Successfully loaded {len(entries)} labor entries from {LABOR_ENTRIES_CSV_PATH}."
+        )
+        return entries
+
+    except FileNotFoundError:
+        logger.error(f"CSV file not found: {LABOR_ENTRIES_CSV_PATH}")
+        raise
+
+    except ValueError as e:
+        logger.error(f"Validation error in CSV file: {e}")
+        raise
+
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while loading labor entries: {e}")
+        raise
+
+def syncro_prepare_ticket_labor_json(
+    config,
+    labor_entry: Dict[str, Any],
+    ticket: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Build the request payload for creating a ticket labor (timer) entry."""
+
+    if not ticket:
+        logger.error("Ticket context is required to prepare labor entry payload.")
+        return None
+
+    ticket_number = labor_entry.get("ticket number")
+
+    try:
+        duration_raw = labor_entry.get("duration minutes")
+        duration_minutes = int(float(duration_raw)) if duration_raw is not None else None
+    except (TypeError, ValueError):
+        logger.error(
+            f"Invalid duration minutes '{labor_entry.get('duration minutes')}' for ticket {ticket_number}."
+        )
+        return None
+
+    if duration_minutes is None or duration_minutes <= 0:
+        logger.error(
+            f"Duration minutes must be greater than zero for ticket {ticket_number}."
+        )
+        return None
+
+    created_at_raw = labor_entry.get("created at")
+    created_at = parse_comment_created(created_at_raw)
+    if not created_at:
+        logger.error(f"Invalid created-at timestamp '{created_at_raw}' for ticket {ticket_number}.")
+        return None
+
+    if created_at.tzinfo is None:
+        try:
+            local_timezone = pytz.timezone(SYNCRO_TIMEZONE)
+            created_at = local_timezone.localize(created_at)
+        except Exception as e:
+            logger.error(f"Failed to localize timestamp '{created_at_raw}': {e}")
+            return None
+
+    end_at = created_at + timedelta(minutes=duration_minutes)
+
+    tech_name = labor_entry.get("tech")
+    user_id = None
+    if tech_name:
+        user_id_raw = get_syncro_tech(tech_name)
+        if user_id_raw is not None:
+            try:
+                user_id = int(user_id_raw)
+            except (TypeError, ValueError):
+                logger.warning(f"Unable to cast tech ID '{user_id_raw}' to integer for tech '{tech_name}'.")
+        else:
+            logger.warning(f"Technician '{tech_name}' not found for ticket {ticket_number}.")
+    else:
+        logger.warning(f"No technician specified for ticket {ticket_number} labor entry.")
+
+    product_name = labor_entry.get("labor type")
+    product_id = get_syncro_product_id_by_name(product_name, config=config) if product_name else None
+    if product_name and product_id is None:
+        logger.warning(
+            f"Labor type '{product_name}' could not be matched to a product for ticket {ticket_number}."
+        )
+
+    notes = labor_entry.get("notes")
+
+    billable_override = parse_billable_status(labor_entry.get("billable status"))
+    visibility_hidden = parse_visibility_value(labor_entry.get("visibility"))
+
+    payload: Dict[str, Any] = {
+        "start_at": created_at.isoformat(),
+        "end_at": end_at.isoformat(),
+        "duration_minutes": duration_minutes,
+        "notes": notes,
+    }
+
+    if user_id is not None:
+        payload["user_id"] = user_id
+    if product_id is not None:
+        payload["product_id"] = product_id
+    if billable_override is not None:
+        payload["billable_override"] = billable_override
+    if visibility_hidden is not None:
+        payload["hidden"] = visibility_hidden
+
+    cleaned_payload = {key: value for key, value in payload.items() if value is not None}
+
+    logger.debug(
+        f"Prepared labor payload for ticket {ticket_number} (ID {ticket.get('id')}): {cleaned_payload}"
+    )
+
+    return cleaned_payload
 
 def syncro_get_all_comments_from_csv() -> List[Dict[str, Any]]:
     """

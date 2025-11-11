@@ -116,17 +116,28 @@ def syncro_get_all_customers(config):
 def syncro_get_all_contacts(config):
     """Fetch all contacts from SyncroMSP API."""
     endpoint = '/contacts'
-    try:        
+    try:
         contacts = syncro_api_call_paginated(config, endpoint)
         logger.debug(f"Retrieved {len(contacts)} contacts")
         return contacts
     except Exception as e:
         logger.error(f"Error fetching contacts: {e}")
         return []
- 
+
+def syncro_get_all_products(config):
+    """Fetch all products from SyncroMSP API."""
+    endpoint = '/products'
+    try:
+        products = syncro_api_call_paginated(config, endpoint)
+        logger.debug(f"Retrieved {len(products)} products")
+        return products
+    except Exception as e:
+        logger.error(f"Error fetching products: {e}")
+        return []
+
 def syncro_get_all_tickets(config):
     endpoint = '/tickets'
-    try:        
+    try:
         tickets = syncro_api_call_paginated(config, endpoint)
         logger.debug(f"Retrieved {len(tickets)} tickets: {tickets}")
         return tickets
