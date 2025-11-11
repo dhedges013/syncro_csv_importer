@@ -40,7 +40,7 @@ def run_tickets_comments_combined(config):
                 logger.info(f"Creating new ticket: {ticket_number}")
                 syncro_create_ticket(config, json_payload)
             else:
-                json_payload = syncro_prepare_ticket_combined_comment_json(ticket_data)
+                json_payload = syncro_prepare_ticket_combined_comment_json(config, ticket_data)
                 logger.info(f"Adding comment to ticket: {ticket_number}")
                 syncro_create_comment(config, json_payload)
 
