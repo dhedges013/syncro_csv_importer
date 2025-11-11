@@ -41,19 +41,16 @@ Importer doesnt account for:
 
 ## Preparing Your Ticket Data
 
-1. **Review & Prepare CSV Files**  
-   - Review `ticket_comment_template.csv` and `tickets_template.csv`.  
-   - Clone these template files and **add your data**.  
-   - Rename them to:
-     - `ticket_comments.csv`
-     - `tickets.csv`
-   - Place in the root folder 
+1. **Review & Prepare CSV Files**
+   - Review `tickets_and_comments_combined_template.csv`.
+   - Clone this template file and **add your data**.
+   - Rename it to `tickets_and_comments_combined.csv` and place it in the project root.
 
-2. **Running the Importer**  
-   - Run `cli.py` to load in the tickets or comments.  
-   - You will be prompted to choose logging level, Clear Temp_Data, Enter Subdomain and API Key
-   - Last will ask you to pick either Ticket or Comments to import.
-   - Data is validated on csv load and will error out of the import without the csv being filled out
+2. **Running the Importer**
+   - Run `cli.py` to launch the importer.
+   - You will be prompted to choose logging level, clear `syncro_temp_data.json`, and enter your subdomain and API key.
+   - Choose between the combined ticket/comment importer or the ticket labor importer from the menu.
+   - Data is validated on CSV load and will error out of the import without the CSV being filled out.
 
 
 ## Testing with Sample Data
