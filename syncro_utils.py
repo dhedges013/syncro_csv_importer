@@ -1498,6 +1498,7 @@ def syncro_get_all_tickets_and_comments_from_combined_csv():
         "ticket number",
         "tech",
         "end user",
+        "comment owner",
         "ticket subject",
         "ticket description",
         "timestamp",
@@ -1514,6 +1515,9 @@ def syncro_get_all_tickets_and_comments_from_combined_csv():
     
     try:
         logger.info("Attempting to load comments from CSV...")
+        # ``load_csv`` relies on ``csv.DictReader`` so field order in the source
+        # file or template does not affect how rows are parsed; matching header
+        # names are all that is required.
         comments = load_csv(COMBINED_TICKETS_COMMENTS_CSV_PATH, required_fields=required_fields, logger=logger)
         grouped_comments_by_ticket_number = group_comments_by_ticket_number(comments)        
         logger.info(f"Successfully loaded {len(comments)} comments from {COMBINED_TICKETS_COMMENTS_CSV_PATH}.")
