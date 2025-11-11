@@ -161,3 +161,5 @@ cython_debug/
 
 syncro_temp_data.json
 syncro_temp_data.json
+ticket_labor_entries.csv
+tickets_and_comments_combined.csv
