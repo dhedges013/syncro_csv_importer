@@ -1135,6 +1135,7 @@ def syncro_prepare_ticket_combined_json(config, ticket):
         "ticket description",
         "timestamp",
         "email body",
+        "comment owner",
         "ticket status",
         "ticket issue type",
         "ticket created date",
@@ -1265,7 +1266,7 @@ def parse_comment_created(comment_created: Any) -> Optional[datetime]:
     logger.error("Unrecognized date format: %s", comment_created)
     return None
 
-def syncro_prepare_ticket_combined_comment_json(comment):
+def syncro_prepare_ticket_combined_comment_json(config, comment):
     """
     Used with the tickets_and_comments_combined.csv template
 
@@ -1282,12 +1283,13 @@ def syncro_prepare_ticket_combined_comment_json(comment):
         "ticket description",
         "timestamp",
         "email body",
+        "comment owner",
         "ticket status",
         "ticket issue type",
         "ticket created date",
         "ticket priority"
     ]
-    """ 
+    """
     #pull out individual fields and process them for creating a Syncro comment
     comment_created_raw = comment.get("timestamp")
     parsed_created = parse_comment_created(comment_created_raw)
@@ -1298,9 +1300,41 @@ def syncro_prepare_ticket_combined_comment_json(comment):
         logger.error(f"Invalid timestamp for comment: {comment_created_raw}")
         syncro_created_date = None
     customer = comment.get("ticket customer") #need for contact lookup
+    comment_owner = comment.get("comment owner")
     ticket_number = comment.get("ticket number")
     ticket_comment = comment.get("email body") or DEFAULTS.get("email body")
-    comment_contact = comment.get("tech") or comment.get("end user")
+    comment_contact = None
+
+    if comment_owner:
+        customer_id = get_customer_id_by_name(customer, config) if customer else None
+
+        if customer_id:
+            comment_contact = get_syncro_customer_contact(customer_id, comment_owner)
+            if comment_contact is None:
+                logger.warning(
+                    "Unable to resolve comment owner '%s' to a Syncro contact for customer '%s'.",
+                    comment_owner,
+                    customer,
+                )
+        else:
+            logger.warning(
+                "Unable to determine customer id for '%s'; using comment owner name for contact.",
+                customer,
+            )
+            comment_contact = comment_owner
+
+        if comment_contact is None:
+            # Fall back to using the provided name directly if lookup failed
+            comment_contact = comment_owner
+
+    if comment_contact is None:
+        comment_contact = comment.get("tech") or comment.get("end user")
+
+    if comment_contact is None:
+        logger.error(
+            "No comment owner, tech, or end user available for ticket %s; comment will lack owner information.",
+            ticket_number,
+        )
 
     # Create JSON payload for a Syncro comment
     comment_json = {
