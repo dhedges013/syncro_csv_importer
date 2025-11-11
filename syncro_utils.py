@@ -319,6 +319,17 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
             for row_number, row in enumerate(reader, start=1):
                 cleaned_row = {}
                 for key, value in row.items():
+                    if key is None:
+                        message = (
+                            "Row {row_number}: Encountered a column without a header while "
+                            "processing '{filepath}'. Value: '{value}'. Ensure the CSV matches the "
+                            "expected template."
+                        )
+                        logger.error(message.format(row_number=row_number, filepath=filepath, value=value))
+                        raise ValueError(
+                            f"Row {row_number}: Found column without header while reading {filepath}."
+                        )
+
                     key_lower = key.lower()
                     if value is None or value.strip() == "":
                         default_value = DEFAULTS.get(key_lower)
@@ -350,7 +361,7 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
         logger.error(f"Validation error in CSV file: {e}")
         raise
     except Exception as e:
-        logger.error(f"Error reading CSV file {filepath}: {e}")
+        logger.exception(f"Error reading CSV file {filepath}: {e}")
         raise
 def validate_ticket_data(tickets: List[Dict[str, Any]], temp_data: Dict[str, Any], logger: logging.Logger) -> None:
 
