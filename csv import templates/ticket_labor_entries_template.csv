@@ -1,0 +1,3 @@
+Customer,Ticket Number,Entry Sequence,Tech,Duration Minutes,Visibility,Billable Status,Labor Type,Created At,Notes
+Sample Customer,1001,1,Sample Tech,15,Private,Billable,Remote Support,2024-12-01 09:00:00,Documented troubleshooting steps.
+Sample Customer,1001,2,Sample Tech,30,Public,Non-Billable,Project Time,2024-12-01 10:00:00,Follow-up actions recorded.
