@@ -103,7 +103,7 @@ def syncro_create_ticket(config,ticket_data: dict) -> dict:
         except Exception as e:
             logger.error(f"Error getting comments attributes: {e}")
         
-        logger.info(f"Creating a ticket with payload: {payload}")  
+        logger.debug(f"Creating a ticket with payload: {payload}")  
         try:
             response = syncro_api_call(config,"POST", endpoint,params=payload)
 
@@ -111,10 +111,10 @@ def syncro_create_ticket(config,ticket_data: dict) -> dict:
                 ticket_number =response.get('ticket', {}).get('number', 'Unknown')
 
                 logger.info(f"Successfully created ticket: {ticket_number}")
-                logger.info(f"creating intial issue {comments_attributes}")
+                logger.debug(f"creating intial issue {comments_attributes}")
                 try:
 
-                    logger.info(f"adding ticket number to intial issue ")
+                    logger.debug(f"adding ticket number to intial issue ")
 
                     comments_attributes[0]["ticket_number"] = ticket_number
 
@@ -155,7 +155,7 @@ def syncro_create_ticket_timer_entry(config, ticket_id: int, timer_data: dict) -
             for key, value in timer_data.items()
         }
 
-        logger.info(
+        logger.debug(
             f"Creating ticket timer entry for ticket ID {ticket_id} with payload: {payload}"
         )
 
@@ -192,10 +192,10 @@ def syncro_create_comment(config,comment_data: dict) -> dict:
     """
     try:       
         if type(comment_data) == list:
-            logger.info(f"Creating Comment Function: {len(comment_data)} comments.")
+            logger.debug(f"Creating Comment Function: {len(comment_data)} comments.")
             comment_data = comment_data[0]
         else:
-            logger.info("Creating Comment Function:Comment data is not a list, Creating a single comment.")
+            logger.debug("Creating Comment Function:Comment data is not a list, Creating a single comment.")
             logger.debug(f"Comment data: {comment_data}")
             comment_data = comment_data
 
@@ -220,14 +220,14 @@ def syncro_create_comment(config,comment_data: dict) -> dict:
         #Logic to look for existing comments
         existing_comments = existing_ticket.get("comments", [])
         if existing_comments is not None:
-            logger.info(f"Creating Comment Function: Found Existing {len(existing_comments)} comments for ticket number '{ticket_number}' ")
+            logger.debug(f"Creating Comment Function: Found Existing {len(existing_comments)} comments for ticket number '{ticket_number}' ")
             for comment in existing_comments:
-                logger.info(f"Creating Comment Function: Comparing existing comment body: {comment.get('body')} with new comment body: {comment_data.get('body')}")
+                logger.debug(f"Creating Comment Function: Comparing existing comment body: {comment.get('body')} with new comment body: {comment_data.get('body')}")
                 if comment.get("body") == comment_data.get("body"):
                     logger.warning(f"Creating Comment Function: Comment already exists for ticket number '{ticket_number}'. Skipping comment creation.")
                     return None  # Move to the next comment 
         else:
-            logger.info(f"Creating Comment Function: No existing comments for ticket number '{ticket_number}'.")
+            logger.debug(f"Creating Comment Function: No existing comments for ticket number '{ticket_number}'.")
             
 
         endpoint = f"/tickets/{ticket_id}/comment"       
@@ -236,12 +236,17 @@ def syncro_create_comment(config,comment_data: dict) -> dict:
         payload = {key: (value.isoformat() if isinstance(value, datetime) else value) for key, value in comment_data.items()}
 
         # Log the prepared payload
-        logger.info(f"Creating a comment with payload: {payload}")
+        logger.debug(f"Creating a comment with payload: {payload}")
         response = syncro_api_call(config,"POST", endpoint,data=payload)
         
         # Handle the response
         if response and "error" not in response:
-            logger.info(f"Successfully created ticket: {response.get('ticket', {}).get('number', 'Unknown')}")
+            comment_id = (
+                response.get("comment", {}).get("id", "Unknown")
+                if isinstance(response, dict)
+                else "Unknown"
+            )
+            logger.info(f"Successfully created comment {comment_id} for ticket {ticket_number}")
             return response
         else:
             logger.error(f"Failed to create ticket. Response: {response}")
