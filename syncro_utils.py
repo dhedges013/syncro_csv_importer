@@ -325,25 +325,6 @@ def check_duplicate_contact(contact_name: str, logger: logging.Logger) -> bool:
         logger.error(f"An unexpected error occurred in check_duplicate_contact: {e}")
         return False
 
-def extract_nested_key(data: dict, key_path: str):
-    """
-    Extract a nested key from a dictionary using dot notation.
-
-    Args:
-        data (dict): Dictionary to search.
-        key_path (str): Dot-separated path to the key.
-
-    Returns:
-        Any: Value of the nested key if it exists, otherwise None.
-    """
-    keys = key_path.split('.')
-    for key in keys:
-        if isinstance(data, dict) and key in data:
-            data = data[key]
-        else:
-            return None
-    return data
-
 def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.Logger = None) -> List[Dict[str, Any]]:
     """
     Load data from a CSV file with validation for required fields.
@@ -1209,7 +1190,7 @@ def parse_comment_created(comment_created: Any) -> Optional[datetime]:
     """
 
     if isinstance(comment_created, datetime):
-        logger.info("comment_created is already a datetime object: %s", comment_created)
+        logger.debug("comment_created is already a datetime object: %s", comment_created)
         return comment_created
 
     if not comment_created:
@@ -1222,7 +1203,7 @@ def parse_comment_created(comment_created: Any) -> Optional[datetime]:
             dayfirst=is_day_first(),
             fuzzy=True,
         )
-        logger.info(
+        logger.debug(
             "Parsed datetime using dateutil with dayfirst=%s: %s",
             is_day_first(),
             parsed_date,
@@ -1269,7 +1250,7 @@ def parse_comment_created(comment_created: Any) -> Optional[datetime]:
     for fmt in possible_formats:
         try:
             parsed_date = datetime.strptime(comment_created, fmt)
-            logger.info("Parsed datetime using format '%s': %s", fmt, parsed_date)
+            logger.debug("Parsed datetime using format '%s': %s", fmt, parsed_date)
             return parsed_date
         except ValueError:
             continue
@@ -1373,33 +1354,32 @@ def group_comments_by_ticket_number(comments):
     """
     
     grouped_comments = defaultdict(list)
+    skipped_tuples = 0
+    skipped_missing_ticket = 0
 
     for comment in comments:
-        #logger.info(f"Checking row Comment: {comment}")
         if isinstance(comment, tuple):  # Check if it's a tuple
-            logger.warning("in group_comments_by_ticket_number: Tuple found instead of dictionary:")
-            #pprint(comment)  # Print the two parts of the tuple
-
-            if len(comment) == 2:  # If the tuple contains two parts
-                key_part, value_part = comment
-                logger.info(f"Key part: {key_part}")
-                logger.info(f"Skipping")
+            skipped_tuples += 1
+            logger.warning("group_comments_by_ticket_number: Tuple found instead of dict; skipping row.")
             continue
 
-        logger.info(f"Commet type is a {type(comment)}")
-        logger.info(f'comment is dict and the keys are: {comment.keys()}')
-        logger.info(f"Comment dict values are: {comment.values()}")
-
-        
         ticket_number = comment.get("ticket number")
-        logger.info(f"Row Ticket Number: {ticket_number}")
-        #input("Press Enter to continue...")
         if ticket_number:
-            logger.info(f"Adding comment to ticket number: {ticket_number}")
-            grouped_comments[ticket_number].append(comment)    
-    keys = grouped_comments.keys()
-    logger.info(f"Keys: {keys}")
-    
+            grouped_comments[ticket_number].append(comment)
+        else:
+            skipped_missing_ticket += 1
+
+    total_grouped = sum(len(entries) for entries in grouped_comments.values())
+    logger.info(
+        "Grouped %s comments across %s tickets.", total_grouped, len(grouped_comments)
+    )
+    if skipped_tuples or skipped_missing_ticket:
+        logger.debug(
+            "Skipped %s tuple rows and %s rows missing ticket numbers while grouping comments.",
+            skipped_tuples,
+            skipped_missing_ticket,
+        )
+
     return dict(grouped_comments)
 
 def syncro_get_all_tickets_and_comments_from_combined_csv():
@@ -1451,17 +1431,17 @@ def syncro_get_all_tickets_and_comments_from_combined_csv():
         raise
     
 def order_ticket_rows_by_date(ticket_rows_data):
-    logger.info(f"Ticket Rows Data passed in is a {type(ticket_rows_data)}") 
+    logger.debug(f"Ticket Rows Data passed in is a {type(ticket_rows_data)}") 
     ticket_rows_data = ticket_rows_data.items()
-    logger.info(f"Ticket Rows Data after .items() in is a {type(ticket_rows_data)}")
+    logger.debug(f"Ticket Rows Data after .items() in is a {type(ticket_rows_data)}")
     ordered_ticket_rows_data = {}
     for row in ticket_rows_data:  # each row is one ticket with lots of entries, need to find the oldest entry
         ordered_entries = []  # this list should hold dict objects of each entry in the ticket
         ticket_number, ticket_data = row
-        logger.info(f"starting on entries for Ticket Number: {ticket_number}")
+        logger.debug(f"starting on entries for Ticket Number: {ticket_number}")
 
         for ticket_entry in ticket_data:  # ticket_data is a list of all the entries in the ticket, should be all the entries in a dict object
-            logger.info(f"Ticket Entry: {ticket_entry}")
+            logger.debug(f"Ticket Entry: {ticket_entry}")
 
             timestamp_str = ticket_entry.get("timestamp")  # I am getting the timestamp of the ticket entry
             if not timestamp_str:
@@ -1476,7 +1456,7 @@ def order_ticket_rows_by_date(ticket_rows_data):
             ordered_entries.append((timestamp, ticket_entry))  # I am appending the timestamp and the ticket entry to the ordered_entries list
 
         ordered_entries.sort(key=lambda x: x[0])
-        logger.info(f"ordered_entries type: {type(ordered_entries)}")  
+        logger.debug(f"ordered_entries type: {type(ordered_entries)}")  
 
         ordered_ticket_rows_data[ticket_number] = ordered_entries
 

@@ -19,8 +19,8 @@ SYNCRO_API_BASE_URL = f"https://{SYNCRO_SUBDOMAIN}.syncromsp.com/api/v1"
 LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "logs"))
 os.makedirs(LOG_DIR, exist_ok=True)
 
-# Define a fixed log file name instead of generating a new one each time
-LOG_FILE_PATH = os.path.join(LOG_DIR, f"app_{datetime.now().strftime('%Y%m%d')}.log")
+# Generate a unique log file name for each run (date + time stamp)
+LOG_FILE_PATH = os.path.join(LOG_DIR, f"app_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
 
 # Timestamp format configuration
 # Options: "US" for MM/DD/YY or "INTL" for DD/MM/YY

@@ -1,5 +1,11 @@
 {
   "ticket issue type": "Other",
   "ticket description": "Import - Data Blank",
-  "email body": "Import - Data Blank"
+  "email body": "Import - Data Blank",
+  "cli_preferences": {
+    "log_level": "INFO",
+    "delete_temp_data": false,
+    "use_saved_credentials": true,
+    "cleanup_old_logs": false
+  }
 }

@@ -8,11 +8,6 @@ logger = get_logger(__name__)
 _api_call_count = 0
 _pause = 0.25
 
-def increment_api_call_count():
-    """Increment the global API call counter."""
-    global _api_call_count
-    _api_call_count += 1
-
 def get_api_call_count() -> int:
     """Retrieve the total API call count."""
     return _api_call_count
@@ -196,7 +191,7 @@ def get_syncro_ticket_by_number(config,ticket_number: str) -> dict:
     try:
         # Define the query parameter for the ticket number
         params = {"number": ticket_number}
-        logger.info(f"Fetching ticket with number: {ticket_number}")
+        logger.debug(f"Fetching ticket with number: {ticket_number}")
         response = syncro_api_call(config,"GET", endpoint,params=params)
 
         # Handle the response
