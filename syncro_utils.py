@@ -1267,7 +1267,7 @@ def syncro_prepare_ticket_combined_comment_json(config, comment):
     # Create JSON payload for a Syncro comment
     comment_json = {
         "ticket_number": ticket_number,
-        "subject": "API Import",
+        "subject": "CSV - API Import",
         "created_at": syncro_created_date,
         "tech": comment_contact,
         "body": ticket_comment,
