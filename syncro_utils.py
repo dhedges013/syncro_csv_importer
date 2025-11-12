@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from dateutil import parser
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import csv
 import pytz
 from collections import defaultdict
@@ -50,6 +50,60 @@ def load_default_config(path: str = DEFAULT_CONFIG_PATH) -> Dict[str, Any]:
 
 DEFAULTS = load_default_config()
 
+
+def validate_customers(customers: Optional[List[Dict[str, Any]]]) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    """
+    Drop customers with blank business names and log summary statistics.
+
+    Returns a sanitized customer list plus a dict containing counts for
+    processed, dropped, auto-filled, and whitespace-trimmed records.
+    """
+    if not customers:
+        logger.info("Customer validation complete: processed 0 records; dropped 0; auto-filled 0; trimmed 0.")
+        return [], {"processed": 0, "dropped": 0, "auto_filled": 0, "trimmed": 0}
+
+    sanitized_customers: List[Dict[str, Any]] = []
+    dropped = 0
+    auto_filled = 0  # Placeholder for future use if we decide to backfill blank names.
+    trimmed = 0
+
+    for customer in customers:
+        business_name = customer.get("business_name")
+        normalized_name = (business_name or "").strip()
+
+        if not normalized_name:
+            dropped += 1
+            logger.debug(
+                "Dropping customer with blank business_name: id=%s, raw_payload=%s",
+                customer.get("id"),
+                customer,
+            )
+            continue
+
+        sanitized_customer = dict(customer)
+        if sanitized_customer.get("business_name") != normalized_name:
+            sanitized_customer["business_name"] = normalized_name
+            trimmed += 1
+
+        sanitized_customers.append(sanitized_customer)
+
+    processed = len(customers)
+    logger.info(
+        "Customer validation complete: processed %s records; dropped %s blank names; auto-filled %s; trimmed %s.",
+        processed,
+        dropped,
+        auto_filled,
+        trimmed,
+    )
+
+    stats = {
+        "processed": processed,
+        "dropped": dropped,
+        "auto_filled": auto_filled,
+        "trimmed": trimmed,
+    }
+    return sanitized_customers, stats
+
 def load_or_fetch_temp_data(config=None) -> dict:
     """
     Load temp data from a file or fetch from Syncro API if file doesn't exist
@@ -72,8 +126,24 @@ def load_or_fetch_temp_data(config=None) -> dict:
         try:
             logger.info(f"Loading temp data from {TEMP_FILE_PATH}")
             with open(TEMP_FILE_PATH, "r") as file:
-                _temp_data_cache = json.load(file)
-                return _temp_data_cache
+                cached_data = json.load(file)
+
+            validated_customers, stats = validate_customers(cached_data.get("customers", []))
+            cached_data["customers"] = validated_customers
+            _temp_data_cache = cached_data
+
+            if stats["dropped"] or stats["auto_filled"] or stats["trimmed"]:
+                try:
+                    with open(TEMP_FILE_PATH, "w") as file:
+                        json.dump(_temp_data_cache, file)
+                    logger.info(
+                        "Persisted sanitized customer data back to %s after removing invalid entries.",
+                        TEMP_FILE_PATH,
+                    )
+                except OSError as write_error:
+                    logger.error(f"Failed to persist sanitized temp data: {write_error}")
+
+            return _temp_data_cache
         except Exception as e:
             logger.error(f"Failed to load temp data from file: {e}")
 
@@ -82,7 +152,7 @@ def load_or_fetch_temp_data(config=None) -> dict:
     try:
         techs = syncro_get_all_techs(config)
         issue_types = syncro_get_issue_types(config)
-        customers = syncro_get_all_customers(config)
+        customers, _ = validate_customers(syncro_get_all_customers(config))
         contacts = syncro_get_all_contacts(config)
         statuses = syncro_get_ticket_statuses(config)
         products = syncro_get_all_products(config)
@@ -688,74 +758,85 @@ def get_syncro_created_date(created: str) -> str:
         logger.error(f"Error processing date '{created}': {e}")
         raise
 
-def get_syncro_customer_contact(customerid: str, contact: str):
+def get_syncro_customer_contact(customerid: Optional[str], contact: Optional[str]) -> Optional[Dict[str, Any]]:
     """
-    Find the closest matching contact ID for a contact name within a specific customer.
+    Resolve a contact record for a given customer and contact name.
 
-    Args:
-        customerid (str): The ID of the customer.
-        contact (str): The name of the contact to find.
-
-    Returns:
-        int: The ID of the closest matching contact, or None if no match is found.
-
-    Logs:
-        - Info for customer and contact searches.
-        - Warning if no matching contact is found.
-        - Info on the closest match and its similarity score.
-        - Error if any issue occurs during execution.
+    Returns a dict containing at least ``id`` and ``name`` when a match is
+    found, otherwise ``None``.
     """
     try:
-        # Validate inputs
-        if not contact:
-            logger.warning(f"Contact name is missing or None for customer ID: {customerid}")
+        if not contact or not str(contact).strip():
+            logger.warning("Contact lookup skipped: blank contact value for customer ID %s.", customerid)
             return None
 
-        # Load temp data
+        if not customerid:
+            logger.error("Contact lookup requires a customer ID; received %s.", customerid)
+            return None
+
         temp_data = load_or_fetch_temp_data()
         contacts_data = temp_data.get("contacts", [])
 
-        # Log the search process
-        logger.debug(f"Looking up customer ID for customer: {customerid}")
-
-        if not customerid:
-            logger.error(f"For Contact Lookup you need the Customer ID. Customer '{customerid}' not found.")
-            return None
-
-        # Filter contacts for the given customer ID
+        normalized_customer_id = str(customerid)
         customer_contacts = [
-            c for c in contacts_data if c.get("customer_id") == customerid
+            c for c in contacts_data if str(c.get("customer_id")) == normalized_customer_id
         ]
 
         if not customer_contacts:
-            logger.warning(f"No contacts found for customer ID: {customerid}")
+            logger.warning("No contacts found for customer ID %s.", normalized_customer_id)
             return None
 
-        # Normalize the input contact name and contact keys
-        normalized_input_contact = contact.strip().lower()
-        normalized_filtered_contacts = {
-            c["name"].strip().lower(): c
-            for c in customer_contacts
-            if c.get("name") and c.get("id")
-        }
-        
-        logger.debug(f"number of contacts found was {len(normalized_filtered_contacts)}")
-        logger.debug(f"Contact Lookup: Normalized input contact: {normalized_input_contact}")
-        #logger.debug(f"Contact Lookup: Normalized filtered contacts: {normalized_filtered_contacts}") # print all contacts which can be a long list in the log file
+        normalized_input_contact = str(contact).strip().lower()
+        normalized_filtered_contacts = {}
 
-        # Check for an exact match
-        if normalized_input_contact in normalized_filtered_contacts:
-            logger.debug(f"Match found for contact '{contact}' in customer ID: {customerid}")           
-            found_contact_id = normalized_filtered_contacts[normalized_input_contact].get("id")
+        for record in customer_contacts:
+            raw_name = record.get("name")
+            contact_id = record.get("id")
 
-            return found_contact_id
-        
-        # Log no match found
-        logger.warning(f"No exact found for contact '{contact}' in customer ID: {customerid}")
+            if contact_id is None or not raw_name:
+                logger.debug(
+                    "Skipping contact record missing id/name for customer %s: %s",
+                    normalized_customer_id,
+                    record,
+                )
+                continue
+
+            normalized_name = str(raw_name).strip().lower()
+            normalized_filtered_contacts[normalized_name] = {
+                "id": contact_id,
+                "name": str(raw_name).strip(),
+            }
+
+        logger.debug(
+            "Prepared %s contacts for lookup against normalized name '%s'.",
+            len(normalized_filtered_contacts),
+            normalized_input_contact,
+        )
+
+        match = normalized_filtered_contacts.get(normalized_input_contact)
+        if match:
+            logger.debug(
+                "Matched contact '%s' to ID %s for customer %s.",
+                contact,
+                match["id"],
+                normalized_customer_id,
+            )
+            return match
+
+        logger.warning(
+            "No exact match for contact '%s' (customer %s).",
+            contact,
+            normalized_customer_id,
+        )
         return None
 
     except Exception as e:
-        logger.error(f"Error occurred while finding contact '{contact}' for customer ID: {customerid}: {e}")
+        logger.error(
+            "Error occurred while finding contact '%s' for customer ID %s: %s",
+            contact,
+            customerid,
+            e,
+        )
         raise
 
 
@@ -1086,9 +1167,11 @@ def syncro_prepare_ticket_combined_json(config, ticket):
     customer_id = get_customer_id_by_name(customer, config)
     syncro_ticket_number = clean_syncro_ticket_number(ticket_number) 
     syncro_created_date = get_syncro_created_date(created)
-    syncro_contact = get_syncro_customer_contact(customer_id, end_user)
+    contact_match = get_syncro_customer_contact(customer_id, end_user)
+    syncro_contact_id = contact_match.get("id") if contact_match else None
+    contact_display_name = (contact_match.get("name") if contact_match else None) or tech_name or end_user
     syncro_tech = get_syncro_tech(tech_name) if tech_name else None
-    initial_issue_comments = build_syncro_initial_issue(initial_issue, tech_name or end_user, syncro_created_date)
+    initial_issue_comments = build_syncro_initial_issue(initial_issue, contact_display_name, syncro_created_date)
     syncro_issue_type = get_syncro_issue_type(issue_type)
     syncro_priority = get_syncro_priority(priority)
 
@@ -1102,7 +1185,7 @@ def syncro_prepare_ticket_combined_json(config, ticket):
         "status": status,
         "problem_type": syncro_issue_type,
         "created_at": syncro_created_date,
-        "contact_id": syncro_contact,
+        "contact_id": syncro_contact_id,
         "priority": syncro_priority,
     }
 
@@ -1237,13 +1320,15 @@ def syncro_prepare_ticket_combined_comment_json(config, comment):
         customer_id = get_customer_id_by_name(customer, config) if customer else None
 
         if customer_id:
-            comment_contact = get_syncro_customer_contact(customer_id, comment_owner)
-            if comment_contact is None:
+            contact_match = get_syncro_customer_contact(customer_id, comment_owner)
+            if contact_match is None:
                 logger.warning(
                     "Unable to resolve comment owner '%s' to a Syncro contact for customer '%s'.",
                     comment_owner,
                     customer,
                 )
+            else:
+                comment_contact = contact_match.get("name") or comment_owner
         else:
             logger.warning(
                 "Unable to determine customer id for '%s'; using comment owner name for contact.",
@@ -1252,7 +1337,6 @@ def syncro_prepare_ticket_combined_comment_json(config, comment):
             comment_contact = comment_owner
 
         if comment_contact is None:
-            # Fall back to using the provided name directly if lookup failed
             comment_contact = comment_owner
 
     if comment_contact is None:
