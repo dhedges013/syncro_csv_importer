@@ -3,10 +3,11 @@ from datetime import datetime, timedelta
 from dateutil import parser
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Set
 import csv
 import pytz
 from collections import defaultdict
+from decimal import Decimal, InvalidOperation
 
 from syncro_configs import (
     get_logger,
@@ -14,6 +15,7 @@ from syncro_configs import (
     SYNCRO_TIMEZONE,
     COMBINED_TICKETS_COMMENTS_CSV_PATH,
     LABOR_ENTRIES_CSV_PATH,
+    INVOICE_IMPORT_CSV_PATH,
     is_day_first,
     get_timestamp_format,
 )
@@ -24,7 +26,8 @@ from syncro_read import (
     syncro_get_all_customers,
     syncro_get_all_contacts,
     syncro_get_ticket_statuses,
-    syncro_get_all_products
+    syncro_get_all_products,
+    get_syncro_ticket_by_number,
 )
 
 _temp_data_cache = None  # Global cache for temp data
@@ -49,6 +52,22 @@ def load_default_config(path: str = DEFAULT_CONFIG_PATH) -> Dict[str, Any]:
 
 
 DEFAULTS = load_default_config()
+
+INVOICE_REQUIRED_FIELDS = [
+    "customer",
+    "invoice number",
+    "invoice date",
+    "due date",
+    "subtotal",
+    "total",
+    "tax",
+    "is paid",
+    "line item sequence",
+    "line item name",
+    "line item quantity",
+    "line item price",
+    "line item taxable",
+]
 
 
 def validate_customers(customers: Optional[List[Dict[str, Any]]]) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
@@ -176,7 +195,6 @@ def load_or_fetch_temp_data(config=None) -> dict:
         raise
 
     return _temp_data_cache
-
 
 def get_customer_id_by_name(customer_name: str, config: Dict[str, Any]):#, logger: logging.Logger) -> int:
     """
@@ -356,9 +374,18 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
             if required_fields:
                 required_map = {field.lower(): field for field in required_fields}
                 required_lower = list(required_map.keys())
-                missing_fields = [required_map[field_lower] for field_lower in required_lower if field_lower not in headers_lower]
+                required_set = set(required_lower)
+                missing_fields = [
+                    required_map[field_lower]
+                    for field_lower in required_lower
+                    if field_lower not in headers_lower
+                ]
                 if missing_fields:
                     raise ValueError(f"Missing required fields in CSV file: {missing_fields}")
+            else:
+                required_map = {}
+                required_lower = []
+                required_set = set()
 
             data = []
             for row_number, row in enumerate(reader, start=1):
@@ -376,6 +403,8 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
                         )
 
                     key_lower = key.lower()
+                    is_required_field = key_lower in required_set
+
                     if value is None or value.strip() == "":
                         default_value = DEFAULTS.get(key_lower)
                         if default_value is not None:
@@ -383,6 +412,9 @@ def load_csv(filepath: str, required_fields: List[str] = None, logger: logging.L
                                 f"Row {row_number}: Field '{key}' is blank, applying default '{default_value}'."
                             )
                             value = default_value
+                        elif not is_required_field:
+                            cleaned_row[key_lower] = ""
+                            continue
                         else:
                             raise ValueError(f"Row {row_number}: Empty value found in field '{key}'.")
                     cleaned_row[key_lower] = value
@@ -581,6 +613,60 @@ def get_syncro_tech(tech_name: str):
     except Exception as e:
         logger.error(f"An unexpected error occurred in get_syncro_tech: {e}")
         return None
+
+def get_syncro_tech_name_by_id(tech_identifier: Any, config=None) -> Optional[str]:
+    """
+    Retrieve the technician name given an ID or ID-like value.
+    """
+
+    if tech_identifier is None:
+        return None
+
+    tech_identifier_str = str(tech_identifier).strip()
+    if not tech_identifier_str:
+        return None
+
+    try:
+        temp_data = load_or_fetch_temp_data(config)
+    except Exception as exc:
+        logger.error("Unable to load technician data for lookup: %s", exc)
+        return None
+
+    techs = temp_data.get("techs", [])
+    if not techs:
+        logger.debug("No technician data available while resolving tech ID '%s'.", tech_identifier_str)
+        return None
+
+    normalized_identifier = tech_identifier_str.lower()
+
+    for tech in techs:
+        tech_id = None
+        tech_name = None
+
+        if isinstance(tech, dict):
+            raw_id = tech.get("id")
+            if raw_id is not None:
+                tech_id = str(raw_id).strip().lower()
+            tech_name = (
+                tech.get("name")
+                or tech.get("full_name")
+                or tech.get("display_name")
+                or tech.get("email")
+            )
+        elif isinstance(tech, list) and tech:
+            raw_id = tech[0]
+            tech_id = str(raw_id).strip().lower()
+            if len(tech) > 1:
+                tech_name = str(tech[1]).strip()
+        else:
+            logger.debug("Unexpected tech entry format when resolving ID '%s': %s", tech_identifier_str, tech)
+            continue
+
+        if tech_id and tech_id == normalized_identifier:
+            return tech_name or tech_identifier_str
+
+    logger.debug("Technician ID '%s' could not be resolved to a name.", tech_identifier_str)
+    return None
 
 def build_syncro_initial_issue(initial_issue: str, syncroContact: str, created_at: Optional[str] = None) -> list:
     """
@@ -820,10 +906,6 @@ def get_syncro_customer_contact(customerid: Optional[str], contact: Optional[str
         )
         raise
 
-
-
-
-
 def get_syncro_priority(priority: str) -> str:
     """
     Match a given priority string with the corresponding Syncro priority.
@@ -979,6 +1061,152 @@ def parse_billable_status(status: Optional[str]) -> Optional[bool]:
     logger.warning(f"Unrecognized billable status '{status}'.")
     return None
 
+def parse_charge_flag(value: Optional[str]) -> bool:
+    """
+    Determine whether a labor entry should be charged.
+
+    Defaults to True (charge) when the column is blank or missing.
+    """
+
+    if value is None:
+        return True
+
+    normalized = value.strip().lower()
+    if not normalized:
+        return True
+
+    if normalized in {"yes", "y", "true", "1", "charge", "bill", "billable"}:
+        return True
+    if normalized in {"no", "n", "false", "0", "skip", "do not charge", "dont charge", "non-billable"}:
+        return False
+
+    logger.warning(f"Unrecognized charge flag '{value}'; defaulting to charge.")
+    return True
+
+def parse_boolean_flag(value: Optional[str], default: Optional[bool] = None) -> Optional[bool]:
+    """Parse a text value into a boolean."""
+
+    if value is None:
+        return default
+
+    normalized = value.strip().lower()
+    if not normalized:
+        return default
+
+    if normalized in {"yes", "y", "true", "1", "paid", "billable", "t"}:
+        return True
+    if normalized in {"no", "n", "false", "0", "unpaid", "f"}:
+        return False
+
+    logger.warning("Unrecognized boolean value '%s'; using default %s.", value, default)
+    return default
+
+def parse_decimal_value(
+    value: Optional[str],
+    field_name: str,
+    *,
+    allow_negative: bool = False,
+    default: Optional[Decimal] = None,
+) -> Optional[Decimal]:
+    """Convert numeric text into a Decimal."""
+
+    if value is None:
+        return default
+
+    if isinstance(value, Decimal):
+        decimal_value = value
+    else:
+        normalized = str(value).strip()
+        if not normalized:
+            return default
+
+        try:
+            decimal_value = Decimal(normalized)
+        except (InvalidOperation, ValueError):
+            logger.error("Invalid numeric value '%s' for %s.", value, field_name)
+            return None
+
+    if not allow_negative and decimal_value < 0:
+        logger.error("%s cannot be negative (value: %s).", field_name, decimal_value)
+        return None
+
+    return decimal_value
+
+def parse_int_value(value: Optional[str], field_name: str) -> Optional[int]:
+    """Convert a value into an integer, returning None on blank/invalid input."""
+
+    if value is None:
+        return None
+
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+
+    try:
+        return int(float(normalized))
+    except (TypeError, ValueError):
+        logger.error("Invalid integer value '%s' for %s.", value, field_name)
+        return None
+
+def parse_invoice_datetime(
+    value: Optional[str],
+    field_name: str,
+    *,
+    include_time: bool = True,
+) -> Optional[str]:
+    """Normalize invoice timestamps to ISO 8601 strings."""
+
+    if value is None:
+        return None
+
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+
+    try:
+        parsed_date = parser.parse(normalized)
+    except (ValueError, TypeError) as exc:
+        logger.error("Unable to parse %s value '%s': %s", field_name, value, exc)
+        return None
+
+    if parsed_date.tzinfo is None:
+        try:
+            local_timezone = pytz.timezone(SYNCRO_TIMEZONE)
+            parsed_date = local_timezone.localize(parsed_date)
+        except Exception as exc:
+            logger.error("Unable to localize %s value '%s': %s", field_name, value, exc)
+            return None
+
+    if include_time:
+        return parsed_date.isoformat()
+    return parsed_date.date().isoformat()
+
+def sanitize_invoice_number(value: Optional[str]) -> Optional[str]:
+    """Strip non-digit characters to enforce numeric invoice numbers."""
+
+    if value is None:
+        return None
+
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+
+    digits_only = "".join(ch for ch in normalized if ch.isdigit())
+
+    if digits_only != normalized and digits_only:
+        logger.warning(
+            "Invoice number '%s' contains non-numeric characters; using '%s' instead.",
+            normalized,
+            digits_only,
+        )
+
+    if not digits_only:
+        if normalized:
+            logger.error("Invoice number '%s' does not contain any digits.", normalized)
+        return None
+
+    return digits_only
+
 def syncro_get_all_ticket_labor_entries_from_csv() -> List[Dict[str, Any]]:
     """Load ticket labor entries from CSV with validation."""
 
@@ -993,6 +1221,7 @@ def syncro_get_all_ticket_labor_entries_from_csv() -> List[Dict[str, Any]]:
         "labor type",
         "created at",
         "notes",
+        "charge?",
     ]
 
     try:
@@ -1013,6 +1242,35 @@ def syncro_get_all_ticket_labor_entries_from_csv() -> List[Dict[str, Any]]:
 
     except Exception as e:
         logger.error(f"An unexpected error occurred while loading labor entries: {e}")
+        raise
+
+def syncro_get_invoice_rows_from_csv() -> List[Dict[str, Any]]:
+    """Load invoice rows from the invoice import template."""
+
+    try:
+        logger.info("Attempting to load invoice rows from CSV...")
+        entries = load_csv(
+            INVOICE_IMPORT_CSV_PATH,
+            required_fields=INVOICE_REQUIRED_FIELDS,
+            logger=logger,
+        )
+        logger.info(
+            "Successfully loaded %s invoice rows from %s.",
+            len(entries),
+            INVOICE_IMPORT_CSV_PATH,
+        )
+        return entries
+
+    except FileNotFoundError:
+        logger.error("CSV file not found: %s", INVOICE_IMPORT_CSV_PATH)
+        raise
+
+    except ValueError as exc:
+        logger.error("Validation error in invoice CSV file: %s", exc)
+        raise
+
+    except Exception as exc:
+        logger.error("Unexpected error while loading invoice rows: %s", exc)
         raise
 
 def syncro_prepare_ticket_labor_json(
@@ -1108,6 +1366,260 @@ def syncro_prepare_ticket_labor_json(
     )
 
     return cleaned_payload
+
+def _resolve_contact_id_for_invoice(
+    customer_id: int,
+    contact_name: Optional[str],
+    contact_cache: Dict[Tuple[int, str], Optional[int]],
+) -> Optional[int]:
+    """Resolve contact IDs per customer/contact pair."""
+
+    if not contact_name:
+        return None
+
+    normalized_name = str(contact_name).strip().lower()
+    if not normalized_name:
+        return None
+
+    cache_key = (int(customer_id), normalized_name)
+    if cache_key in contact_cache:
+        return contact_cache[cache_key]
+
+    contact_record = get_syncro_customer_contact(customer_id, contact_name)
+    contact_id_raw = contact_record.get("id") if contact_record else None
+    contact_id = None
+    if contact_id_raw is not None:
+        try:
+            contact_id = int(contact_id_raw)
+        except (TypeError, ValueError):
+            logger.error(
+                "Contact '%s' for customer ID %s returned invalid ID '%s'.",
+                contact_name,
+                customer_id,
+                contact_id_raw,
+            )
+            contact_id = None
+
+    contact_cache[cache_key] = contact_id
+    return contact_id
+
+def _extract_line_item_sequence(row: Dict[str, Any], fallback_index: int) -> int:
+    """Return the requested line item sequence or fall back to CSV order."""
+
+    value = row.get("line item sequence")
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return fallback_index
+
+def _build_invoice_line_item(
+    row: Dict[str, Any],
+    invoice_number_log: str,
+    config,
+) -> Optional[Dict[str, Any]]:
+    """Transform a CSV row into a Syncro invoice line item."""
+
+    line_item_name = (row.get("line item name") or "").strip()
+    if not line_item_name:
+        logger.error("Invoice %s line item is missing 'line item name'.", invoice_number_log)
+        return None
+
+    quantity_raw = row.get("line item quantity")
+    if quantity_raw is None or not str(quantity_raw).strip():
+        quantity_value = Decimal("1")
+    else:
+        quantity_value = parse_decimal_value(
+            quantity_raw,
+            f"line item quantity '{line_item_name}'",
+        )
+        if quantity_value is None:
+            return None
+
+    if quantity_value <= 0:
+        logger.error(
+            "Line item quantity must be greater than zero for invoice %s (item '%s').",
+            invoice_number_log,
+            line_item_name,
+        )
+        return None
+
+    price_value = parse_decimal_value(
+        row.get("line item price"),
+        f"line item price '{line_item_name}'",
+        allow_negative=True,
+    )
+    if price_value is None:
+        logger.error(
+            "Line item '%s' for invoice %s is missing a valid price.",
+            line_item_name,
+            invoice_number_log,
+        )
+        return None
+
+    line_item: Dict[str, Any] = {
+        "name": line_item_name,
+        "quantity": float(quantity_value),
+        "price": float(price_value),
+    }
+
+    cost_raw = row.get("line item cost")
+    if cost_raw is not None and str(cost_raw).strip():
+        cost_value = parse_decimal_value(
+            cost_raw,
+            f"line item cost '{line_item_name}'",
+            allow_negative=True,
+        )
+        if cost_value is None:
+            return None
+        line_item["cost"] = float(cost_value)
+
+    taxable_flag = parse_boolean_flag(row.get("line item taxable"), default=True)
+    if taxable_flag is not None:
+        line_item["taxable"] = taxable_flag
+
+    item_code = row.get("line item item")
+    normalized_item_code = item_code.strip() if item_code else ""
+    if normalized_item_code:
+        line_item["item"] = normalized_item_code
+
+    product_id = None
+    product_id_raw = row.get("line item product id")
+    if product_id_raw is not None and str(product_id_raw).strip():
+        product_id = parse_int_value(product_id_raw, "line item product id")
+    else:
+        product_name_value = row.get("line item product") or normalized_item_code
+        product_name = product_name_value.strip() if product_name_value else ""
+        if product_name:
+            product_id = get_syncro_product_id_by_name(product_name, config=config)
+            if product_id is None and product_name_value:
+                logger.warning(
+                    "Invoice %s line item '%s' references product '%s' but no matching product ID was found.",
+                    invoice_number_log,
+                    line_item_name,
+                    product_name_value,
+                )
+
+    if product_id is not None:
+        line_item["product_id"] = product_id
+
+    return line_item
+
+def syncro_prepare_invoice_payload(
+    config,
+    invoice_rows: List[Dict[str, Any]],
+    *,
+    contact_cache: Optional[Dict[Tuple[int, str], Optional[int]]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Build the payload for creating an invoice with one or more line items."""
+
+    if not invoice_rows:
+        logger.error("Invoice payload requested without any CSV rows.")
+        return None
+
+    contact_cache = contact_cache if contact_cache is not None else {}
+
+    base_row = invoice_rows[0]
+    raw_invoice_number = base_row.get("invoice number")
+    invoice_number = sanitize_invoice_number(raw_invoice_number)
+    invoice_number_log = invoice_number or raw_invoice_number or "<auto>"
+
+    customer_name = base_row.get("customer")
+    if not customer_name:
+        logger.error("Invoice %s is missing a customer name.", invoice_number_log)
+        return None
+
+    customer_id = get_customer_id_by_name(customer_name, config)
+    if not customer_id:
+        logger.error(
+            "Unable to resolve customer '%s' while building invoice %s.",
+            customer_name,
+            invoice_number_log,
+        )
+        return None
+
+    invoice_date = parse_invoice_datetime(base_row.get("invoice date"), "invoice date")
+    if not invoice_date:
+        logger.error(
+            "Invoice %s has an invalid invoice date '%s'.",
+            invoice_number_log,
+            base_row.get("invoice date"),
+        )
+        return None
+
+    due_date = parse_invoice_datetime(base_row.get("due date"), "due date", include_time=False)
+    note_value = base_row.get("note") or ""
+
+    subtotal = parse_decimal_value(base_row.get("subtotal"), "subtotal")
+    total = parse_decimal_value(base_row.get("total"), "total")
+    tax_value = parse_decimal_value(base_row.get("tax"), "tax")
+
+    contact_id = _resolve_contact_id_for_invoice(customer_id, base_row.get("contact"), contact_cache)
+
+    is_paid = parse_boolean_flag(base_row.get("is paid"))
+
+    ordered_rows = sorted(
+        [(index, row, _extract_line_item_sequence(row, index)) for index, row in enumerate(invoice_rows)],
+        key=lambda item: (item[2], item[0]),
+    )
+
+    line_items: List[Dict[str, Any]] = []
+    seen_signatures: Set[Tuple[str, int]] = set()
+
+    for idx, row, sequence in ordered_rows:
+        signature = ((row.get("line item name") or "").strip().lower(), sequence)
+        if signature in seen_signatures:
+            logger.warning(
+                "Duplicate line item '%s' (sequence %s) detected for invoice %s in CSV row %s; skipping.",
+                row.get("line item name"),
+                sequence,
+                invoice_number_log,
+                idx + 1,
+            )
+            continue
+        seen_signatures.add(signature)
+
+        line_item = _build_invoice_line_item(row, invoice_number_log, config)
+        if not line_item:
+            continue
+        if line_item.get("position") is None:
+            line_item["position"] = sequence or len(line_items) + 1
+        line_items.append(line_item)
+
+    if not line_items:
+        logger.error("Invoice %s did not produce any valid line items.", invoice_number_log)
+        return None
+
+    payload: Dict[str, Any] = {
+        "customer_id": customer_id,
+        "line_items": line_items,
+    }
+
+    if invoice_number:
+        payload["number"] = invoice_number
+    if invoice_date:
+        payload["date"] = invoice_date
+    if due_date:
+        payload["due_date"] = due_date
+    if note_value and note_value.strip():
+        payload["note"] = note_value
+    if contact_id:
+        payload["contact_id"] = contact_id
+
+    numeric_fields = [
+        ("subtotal", subtotal),
+        ("total", total),
+        ("tax", tax_value),
+    ]
+
+    for field_name, decimal_value in numeric_fields:
+        if decimal_value is not None:
+            payload[field_name] = float(decimal_value)
+
+    if is_paid is not None:
+        payload["is_paid"] = is_paid
+
+    logger.debug("Prepared invoice payload for %s: %s", invoice_number_log, payload)
+    return payload
 
 def syncro_prepare_ticket_combined_json(config, ticket):
     """ 

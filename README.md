@@ -1,6 +1,5 @@
 # Open Issues
-When pulling in the Cache'd Customer list if the Business Name is "BLANK" or Null there is no error handing for this
-When Attempting to create a ticket if there is no Customer ID found on the lookup, the import still tries to create a ticket resulting in an error. needs Validation checks before hand and error handing to stop the import 
+Ticket Labor time entries de-dup / prevent dup write isnt working
 
 # syncro_csv_import
  unoffical ticket and comment import tool
@@ -13,8 +12,8 @@ When Attempting to create a ticket if there is no Customer ID found on the looku
    - Syncro Subdomain and API Key
    - Clearing out the temp_data.json file (if there is one already created)
 
-# To-Do List 3.16.25
--Template CSV Data points are not unified
+# To-Do List 11.11.25
+- Expand invoice importer tax-rate/default handling
 
 Importer doesnt account for:
    - if the comment should be private or public communication or not. All comments are imported in as Private
@@ -49,8 +48,22 @@ Importer doesnt account for:
 2. **Running the Importer**
    - Run `cli.py` to launch the importer.
    - You will be prompted to choose logging level, clear `syncro_temp_data.json`, and enter your subdomain and API key.
-   - Choose between the combined ticket/comment importer or the ticket labor importer from the menu.
+   - Choose between the combined ticket/comment importer, the ticket labor importer, or the invoice importer from the menu.
    - Data is validated on CSV load and will error out of the import without the CSV being filled out.
+
+## Preparing Invoice Data
+
+1. **Populate `invoice_import_entries.csv`**
+   - Only the following columns are supported: `Customer`, `Invoice Number`, `Invoice Date`, `Due Date`, `Contact`, `Note`, `Subtotal`, `Total`, `Tax`, `Is Paid`, `Line Item Sequence`, `Line Item Name`, `Line Item Item`, `Line Item Product` (optional—defaults to `Line Item Item`), `Line Item Product Id`, `Line Item Quantity`, `Line Item Cost`, `Line Item Price`, and `Line Item Taxable`.
+   - Each row represents a single invoice line item; repeat the invoice-level fields (customer, invoice number, dates, etc.) for each additional line item belonging to the same invoice.
+   - `Invoice Number` is required, must be numeric (letters are stripped), and is used to prevent duplicates. The importer pulls all existing invoices up front and skips anything that already exists.
+   - Optional fields such as Contact, Note, and Product Id can be left blank if you do not have data for them. Boolean fields accept values such as `True/False`, `Yes/No`, or `1/0`.
+2. **Product & contact lookups**
+   - `Line Item Product` will be matched against the cached Syncro products list and converted into the proper `product_id`. If it is blank, the importer uses the value from `Line Item Item`. You can optionally provide a `Line Item Product Id` instead.
+   - Contact names are resolved per customer; if the name cannot be matched the invoice still imports but without a contact reference.
+3. **Running the invoice importer**
+   - Select option `3` from `cli.py` or call `run_invoice_import(config)` directly.
+   - The importer logs duplicate detection, per-line validation issues, and the total API calls made once the run completes.
 
 
 ## Testing with Sample Data
@@ -72,6 +85,12 @@ Importer doesnt account for:
 
 
 ## Done List
+
+11.11.25
+- Resolved - When pulling in the Cache'd Customer list if the Business Name is "BLANK" or Null there is no error handing for this
+- Removed individual ticket and comments imports
+- added saving domain and api when testing locally
+- added saving cli.py questions to  default_config so you wont be prompted every time
 
 3.16.25
 - Reworked the logging and made it simpler instead of having seperate logging files; Logs will now print to same file

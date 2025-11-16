@@ -144,6 +144,31 @@ def syncro_create_ticket(config,ticket_data: dict) -> dict:
         logger.error(f"Unexpected error occurred while creating ticket: {e}")
         return None
 
+def syncro_create_invoice(config, invoice_payload: dict) -> dict:
+    """Create a Syncro invoice from the prepared payload."""
+
+    endpoint = "/invoices"
+    try:
+        logger.debug(f"Creating invoice with payload: {invoice_payload}")
+        response = syncro_api_call(config, "POST", endpoint, data=invoice_payload)
+        if response:
+            invoice_section = response.get("invoice") or response
+            invoice_number = invoice_section.get("number")
+            logger.info("Successfully created invoice %s.", invoice_number or "<unassigned>")
+            return response
+
+        logger.error("Failed to create invoice; API returned no response.")
+        return None
+
+    except requests.exceptions.HTTPError as http_err:
+        logger.error(f"HTTP error occurred while creating invoice: {http_err}")
+        if hasattr(http_err, "response") and http_err.response is not None:
+            logger.error("Response content: %s", http_err.response.text)
+        return None
+    except Exception as exc:
+        logger.error(f"Unexpected error occurred while creating invoice: {exc}")
+        return None
+
 def syncro_create_ticket_timer_entry(config, ticket_id: int, timer_data: dict) -> dict:
     """Create a ticket timer (labor) entry on an existing Syncro ticket."""
 
@@ -179,6 +204,40 @@ def syncro_create_ticket_timer_entry(config, ticket_id: int, timer_data: dict) -
     except Exception as e:
         logger.error(f"Unexpected error occurred while creating timer entry: {e}")
         return None
+
+def syncro_charge_ticket_timer_entry(config, ticket_id: int, timer_entry_id: int) -> bool:
+    """Charge a previously created ticket timer entry."""
+
+    endpoint = f"/tickets/{ticket_id}/charge_timer_entry"
+    payload = {"timer_entry_id": timer_entry_id}
+
+    try:
+        logger.debug(
+            f"Charging timer entry {timer_entry_id} for ticket ID {ticket_id} with payload: {payload}"
+        )
+
+        response = syncro_api_call(config, "POST", endpoint, data=payload)
+
+        if response and "error" not in response:
+            logger.info(
+                f"Successfully charged timer entry {timer_entry_id} for ticket ID {ticket_id}."
+            )
+            return True
+
+        logger.error(
+            f"Failed to charge timer entry {timer_entry_id} for ticket ID {ticket_id}. Response: {response}"
+        )
+        return False
+
+    except requests.exceptions.HTTPError as http_err:
+        logger.error(f"HTTP error occurred while charging timer entry: {http_err}")
+        if hasattr(http_err, "response") and http_err.response is not None:
+            logger.error(f"Response content: {http_err.response.text}")
+        return False
+
+    except Exception as e:
+        logger.error(f"Unexpected error occurred while charging timer entry: {e}")
+        return False
 
 def syncro_create_comment(config,comment_data: dict) -> dict:
     """

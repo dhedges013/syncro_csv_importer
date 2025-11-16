@@ -5,6 +5,7 @@ from datetime import datetime
 # syncro_configs.py
 SYNCRO_TIMEZONE = "America/New_York"
 LABOR_ENTRIES_CSV_PATH = "ticket_labor_entries.csv"
+INVOICE_IMPORT_CSV_PATH = "invoice_import_entries.csv"
 TEMP_FILE_PATH = "syncro_temp_data.json"
 TEMP_CREDENTIALS_FILE_PATH = "syncro_credentials_temp.json"
 COMBINED_TICKETS_COMMENTS_CSV_PATH = "tickets_and_comments_combined.csv"

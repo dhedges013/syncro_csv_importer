@@ -59,6 +59,59 @@ def syncro_api_call(config, method: str, endpoint: str, data=None, params=None) 
         logger.error(f"Request error occurred: {req_err}")
         raise
 
+def syncro_get_ticket_timer_entries(config, ticket_id: int) -> list:
+    """
+    Retrieve all timer (labor) entries attached to a ticket by reading ticket details.
+    """
+
+    endpoint = f"/tickets/{ticket_id}"
+
+    try:
+        response = syncro_api_call(config, "GET", endpoint)
+    except Exception as exc:
+        logger.error(
+            "Failed to fetch timer entries for ticket ID %s: %s",
+            ticket_id,
+            exc,
+        )
+        return []
+
+    if not isinstance(response, dict):
+        logger.debug(
+            "Unexpected response type %s while fetching timers for ticket ID %s.",
+            type(response),
+            ticket_id,
+        )
+        return []
+
+    ticket_section = response.get("ticket")
+    if not isinstance(ticket_section, dict):
+        logger.debug(
+            "Ticket ID %s response missing ticket payload; returning empty list.",
+            ticket_id,
+        )
+        return []
+
+    possible_keys = [
+        "ticket_timers",
+        "ticket_timer_entries",
+        "timer_entries",
+        "timers",
+    ]
+
+    for key in possible_keys:
+        value = ticket_section.get(key)
+        if isinstance(value, list):
+            return value
+        if isinstance(value, dict):
+            return [value]
+
+    logger.debug(
+        "Ticket ID %s returned no timer entries; returning empty list.",
+        ticket_id,
+    )
+    return []
+
 def syncro_api_call_paginated(config, endpoint: str, params=None) -> list:
     """
     Fetch paginated data from Syncro MSP API using the above `syncro_api_call`.
@@ -149,6 +202,17 @@ def syncro_get_all_products(config):
         return products
     except Exception as e:
         logger.error(f"Error fetching products: {e}")
+        return []
+
+def syncro_get_all_invoices(config):
+    """Fetch all invoices from SyncroMSP API."""
+    endpoint = '/invoices'
+    try:
+        invoices = syncro_api_call_paginated(config, endpoint)
+        logger.debug(f"Retrieved {len(invoices)} invoices")
+        return invoices
+    except Exception as e:
+        logger.error(f"Error fetching invoices: {e}")
         return []
 
 def syncro_get_all_tickets(config):
