@@ -4,11 +4,17 @@ from datetime import datetime
 
 # syncro_configs.py
 SYNCRO_TIMEZONE = "America/New_York"
-LABOR_ENTRIES_CSV_PATH = "ticket_labor_entries.csv"
-INVOICE_IMPORT_CSV_PATH = "invoice_import_entries.csv"
+
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+CSV_DIR = os.path.join(BASE_DIR, "data")
+os.makedirs(CSV_DIR, exist_ok=True)
+
+LABOR_ENTRIES_CSV_PATH = os.path.join(CSV_DIR, "ticket_labor_entries.csv")
+INVOICE_IMPORT_CSV_PATH = os.path.join(CSV_DIR, "invoice_import_entries.csv")
+COMBINED_TICKETS_COMMENTS_CSV_PATH = os.path.join(CSV_DIR, "tickets_and_comments_combined.csv")
+
 TEMP_FILE_PATH = "syncro_temp_data.json"
 TEMP_CREDENTIALS_FILE_PATH = "syncro_credentials_temp.json"
-COMBINED_TICKETS_COMMENTS_CSV_PATH = "tickets_and_comments_combined.csv"
 
 # Syncro API Configuration
 SYNCRO_SUBDOMAIN = ""
@@ -17,7 +23,7 @@ SYNCRO_API_KEY = ""
 SYNCRO_API_BASE_URL = f"https://{SYNCRO_SUBDOMAIN}.syncromsp.com/api/v1"
 
 # Logging Configuration
-LOG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "logs"))
+LOG_DIR = os.path.abspath(os.path.join(BASE_DIR, "logs"))
 os.makedirs(LOG_DIR, exist_ok=True)
 
 # Generate a unique log file name for each run (date + time stamp)

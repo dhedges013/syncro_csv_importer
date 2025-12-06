@@ -1,6 +1,0 @@
-Customer,Ticket Number,Entry Sequence,Tech,Duration Minutes,Visibility,Billable Status,Labor Type,Created At,Notes,charge?
-Hedges MSP,3229,1,Tim the Tech,65,Private,Billable,Software,2025-10-25 15:27:07.301969,Added findings while reviewing Software update causing application errors.,True
-Hedges MSP,3229,2,Tim the Tech,45,Private,Billable,Remote Support,2025-10-31 09:47:07.301969,Added findings while reviewing Software update causing application errors.,True
-Hedges MSP,3229,3,Tim the Tech,30,Public,Billable,Security,2025-11-04 21:42:07.301969,Added findings while reviewing Software update causing application errors.,False
-No Change Carl,7117,1,Tim the Tech,40,Private,Billable,Security,2025-10-24 12:46:55.171474,Added findings while reviewing User unable to access shared drive.,True
-

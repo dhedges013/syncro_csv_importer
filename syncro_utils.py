@@ -1221,12 +1221,23 @@ def syncro_get_all_ticket_labor_entries_from_csv() -> List[Dict[str, Any]]:
         "labor type",
         "created at",
         "notes",
-        "charge?",
     ]
 
     try:
         logger.info("Attempting to load ticket labor entries from CSV...")
         entries = load_csv(LABOR_ENTRIES_CSV_PATH, required_fields=required_fields, logger=logger)
+        legacy_charge_flag_found = False
+
+        for entry in entries:
+            # Accept legacy 'charge?' header by normalizing it to 'charge'.
+            if "charge" not in entry and "charge?" in entry:
+                entry["charge"] = entry.get("charge?")
+                legacy_charge_flag_found = True
+
+        if legacy_charge_flag_found:
+            logger.info(
+                "Detected legacy 'charge?' column in labor CSV; treating it as 'charge'."
+            )
         logger.info(
             f"Successfully loaded {len(entries)} labor entries from {LABOR_ENTRIES_CSV_PATH}."
         )

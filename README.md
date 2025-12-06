@@ -37,13 +37,14 @@ Importer doesnt account for:
 3. **Logs & File Management**  
    - Log files are stored in the `logs` folder.  
    - A new log file is created for day.
+   - Place all import CSV files in the `data` folder (`tickets_and_comments_combined.csv`, `ticket_labor_entries.csv`, `invoice_import_entries.csv`).
 
 ## Preparing Your Ticket Data
 
 1. **Review & Prepare CSV Files**
    - Review `tickets_and_comments_combined_template.csv`.
    - Clone this template file and **add your data**.
-   - Rename it to `tickets_and_comments_combined.csv` and place it in the project root.
+   - Rename it to `tickets_and_comments_combined.csv` and place it in the `data` folder in the project root.
 
 2. **Running the Importer**
    - Run `cli.py` to launch the importer.
@@ -53,7 +54,7 @@ Importer doesnt account for:
 
 ## Preparing Invoice Data
 
-1. **Populate `invoice_import_entries.csv`**
+1. **Populate `invoice_import_entries.csv` (located in the `data` folder)**
    - Only the following columns are supported: `Customer`, `Invoice Number`, `Invoice Date`, `Due Date`, `Contact`, `Note`, `Subtotal`, `Total`, `Tax`, `Is Paid`, `Line Item Sequence`, `Line Item Name`, `Line Item Item`, `Line Item Product` (optional—defaults to `Line Item Item`), `Line Item Product Id`, `Line Item Quantity`, `Line Item Cost`, `Line Item Price`, and `Line Item Taxable`.
    - Each row represents a single invoice line item; repeat the invoice-level fields (customer, invoice number, dates, etc.) for each additional line item belonging to the same invoice.
    - `Invoice Number` is required, must be numeric (letters are stripped), and is used to prevent duplicates. The importer pulls all existing invoices up front and skips anything that already exists.

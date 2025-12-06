@@ -505,7 +505,10 @@ def run_ticket_labor(config, *, interactive: bool = False, max_entries: Optional
                 ):
                     return
 
-            should_charge = parse_charge_flag(entry.get("charge?"))
+            charge_value = entry.get("charge")
+            if charge_value is None:
+                charge_value = entry.get("charge?")
+            should_charge = parse_charge_flag(charge_value)
 
             try:
                 response = syncro_create_ticket_timer_entry(config, ticket_id_int, payload)
